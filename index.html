@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f5ede0" />
+    <meta name="description" content="Раскраска с Рыжиком: заливка областей и рисование пальцем." />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Раскраска" />
+    <title>Раскраска с Рыжиком</title>
+    <link rel="icon" href="%BASE_URL%favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <span class="star" aria-hidden="true"></span>
+        <div class="titles">
+          <h1>Раскраска с Рыжиком</h1>
+          <p id="hint">Нажми на область, чтобы закрасить её</p>
+        </div>
+        <span class="star star-small" aria-hidden="true"></span>
+      </header>
+
+      <main class="stage" id="stage">
+        <canvas id="sheet" width="1280" height="720" aria-label="Раскраска: Рыжик и медведь"></canvas>
+        <p id="loading" class="loading">Открываем раскраску…</p>
+      </main>
+
+      <aside class="dock" aria-label="Инструменты">
+        <div class="tools" role="toolbar" aria-label="Чем рисуем">
+          <button type="button" class="tool" data-tool="fill" aria-pressed="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 3h8l1 4H6L7 3zm-1 6h12l-.6 2.2A5 5 0 0 1 12.6 15H11v2.2a2.2 2.2 0 1 1-2 0V15H7.4a5 5 0 0 1-4.8-3.8L2 9h4z"/></svg>
+            <span>Заливка</span>
+          </button>
+          <button type="button" class="tool" data-tool="pencil" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 16.5 14.8 5.7a2 2 0 0 1 2.8 0l.7.7a2 2 0 0 1 0 2.8L7.5 20H4v-3.5zM14.1 6.4 5.5 15v2.5H8l8.6-8.6-2.5-2.5z"/></svg>
+            <span>Карандаш</span>
+          </button>
+          <button type="button" class="tool" data-tool="brush" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 3c3 2 5 5 4.2 8.2-.4 1.6-1.6 2.6-3 3.2-.6 1.6-2 2.6-3.7 2.6H9l-1 4H5v-3l3.2-3.2c.2-1.8 1.4-3.3 3.2-4 .2-1.6 1-3.4 2.6-5.8z"/></svg>
+            <span>Кисть</span>
+          </button>
+          <button type="button" class="tool" data-tool="marker" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 16.2 13.6 6.6l3.8 3.8L7.8 20H4v-3.8zM14.3 5.9l1.4-1.4a2 2 0 0 1 2.8 0l.9.9a2 2 0 0 1 0 2.8l-1.4 1.4-3.7-3.7z"/></svg>
+            <span>Фломастер</span>
+          </button>
+          <button type="button" class="tool" data-tool="eraser" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M8 3.2h8A2.8 2.8 0 0 1 18.8 6v12a2.8 2.8 0 0 1-2.8 2.8H8A2.8 2.8 0 0 1 5.2 18V6A2.8 2.8 0 0 1 8 3.2zm.4 9.1h7.2V14H8.4v-1.7z"/></svg>
+            <span>Ластик</span>
+          </button>
+        </div>
+
+        <div id="colors" class="colors" role="listbox" aria-label="Цвета"></div>
+
+        <label class="size">
+          <span>Размер</span>
+          <input id="size" type="range" min="8" max="64" value="22" />
+          <span id="size-dot" class="size-dot" aria-hidden="true"></span>
+        </label>
+
+        <label class="clip">
+          <input id="clip" type="checkbox" checked />
+          <span class="switch" aria-hidden="true"></span>
+          <span>Не выходить за линии</span>
+        </label>
+
+        <div class="actions">
+          <button type="button" id="undo" disabled>Назад</button>
+          <button type="button" id="redo" disabled>Вперёд</button>
+          <button type="button" id="clear">Очистить</button>
+          <button type="button" id="save" class="primary">Сохранить</button>
+        </div>
+      </aside>
+    </div>
+
+    <dialog id="dialog">
+      <form method="dialog">
+        <p>Стереть рисунок?</p>
+        <div class="dialog-actions">
+          <button type="submit" value="cancel">Оставить</button>
+          <button type="submit" class="danger" value="clear">Стереть</button>
+        </div>
+      </form>
+    </dialog>
+
+    <p id="toast" class="toast" hidden></p>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
