@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "albums": [
+    {
+      "id": "friends",
+      "title": "Друзья",
+      "emoji": "",
+      "cover": "shot11",
+      "available": true,
+      "pictures": [
+        {
+          "id": "shot11",
+          "title": "Рыжик и Мишка"
+        }
+      ]
+    },
+    {
+      "id": "family",
+      "title": "Семья",
+      "emoji": "",
+      "cover": null,
+      "available": false,
+      "pictures": []
+    },
+    {
+      "id": "songs",
+      "title": "Песенки",
+      "emoji": "",
+      "cover": null,
+      "available": false,
+      "pictures": []
+    }
+  ]
+}

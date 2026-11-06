@@ -3,12 +3,16 @@ import { buildRegionLabels, nearestLabel, paintLabel } from "./regions";
 export type Tool = "fill" | "pencil" | "brush" | "marker" | "eraser";
 
 const TARGET_WIDTH = 1280;
-const HISTORY_LIMIT = 10;
+/** Design doc: undo/redo stack of 30 steps. */
+const HISTORY_LIMIT = 30;
 /** Pixels darker than this are the line art, not empty paper. */
 const INK_ALPHA = 72;
 
 type Rgb = { r: number; g: number; b: number };
 type Layer = { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D };
+
+/** How much of the paintable area carries paint. Used by S5 and album dots. */
+export type PaintProgress = { painted: number; total: number; ratio: number };
 
 function makeCanvas(w: number, h: number, read: boolean): Layer {
   const canvas = document.createElement("canvas");
@@ -74,6 +78,8 @@ export class ColoringBook {
   private last: { x: number; y: number } | null = null;
 
   onHistory: (() => void) | null = null;
+  /** Fired after a fill or a finished stroke, with the picture progress. */
+  onPaint: ((progress: PaintProgress) => void) | null = null;
 
   constructor(
     private view: HTMLCanvasElement,
@@ -160,6 +166,7 @@ export class ColoringBook {
     this.paint.ctx.putImageData(previous, 0, 0);
     this.render();
     this.emit();
+    this.emitPaint();
   }
 
   redo(): void {
@@ -171,6 +178,13 @@ export class ColoringBook {
     this.paint.ctx.putImageData(next, 0, 0);
     this.render();
     this.emit();
+    this.emitPaint();
+  }
+
+  /** Commits an in-progress stroke. Autosave calls this so a draft never
+   *  misses the line the child is drawing at that moment. */
+  flush(): void {
+    if (this.stroking) this.finishStroke();
   }
 
   /** True when there is paint to erase or undo back to. */
@@ -185,6 +199,7 @@ export class ColoringBook {
     reset(this.paint.ctx);
     this.paint.ctx.clearRect(0, 0, this.w, this.h);
     this.render();
+    this.emitPaint();
     return true;
   }
 
@@ -192,9 +207,7 @@ export class ColoringBook {
     if (!this.ready) return false;
     if (this.stroking) this.finishStroke();
     this.render();
-    const blob = await new Promise<Blob | null>((resolve) => {
-      this.view.toBlob(resolve, "image/png");
-    });
+    const blob = await this.exportBlob();
     if (!blob) return false;
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -205,6 +218,72 @@ export class ColoringBook {
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1500);
     return true;
+  }
+
+  /** Flattened PNG of the whole sheet: paper, paint, line art. */
+  async exportBlob(): Promise<Blob | null> {
+    if (!this.ready) return null;
+    if (this.stroking) this.finishStroke();
+    this.render();
+    return new Promise<Blob | null>((resolve) => {
+      this.view.toBlob(resolve, "image/png");
+    });
+  }
+
+  /** Flattened PNG scaled down to `maxSide`, for the gallery and the reward screen. */
+  async exportDataUrl(maxSide = 1280): Promise<string | null> {
+    if (!this.ready) return null;
+    if (this.stroking) this.finishStroke();
+    this.render();
+    const scale = Math.min(1, maxSide / Math.max(this.w, this.h));
+    if (scale >= 1) return this.view.toDataURL("image/png");
+    const target = makeCanvas(Math.round(this.w * scale), Math.round(this.h * scale), false);
+    target.ctx.imageSmoothingEnabled = true;
+    target.ctx.imageSmoothingQuality = "high";
+    target.ctx.drawImage(this.view, 0, 0, target.canvas.width, target.canvas.height);
+    return target.canvas.toDataURL("image/png");
+  }
+
+  /**
+   * Paint layer as a PNG data URL. Only the paint, not the line art: a draft
+   * stays small and survives a change of picture assets.
+   */
+  snapshot(): string | null {
+    if (!this.ready || !this.hasPaint()) return null;
+    return this.paint.canvas.toDataURL("image/png");
+  }
+
+  /** Restores a draft produced by `snapshot`. Lines stay untouched. */
+  async restore(dataUrl: string): Promise<void> {
+    if (!this.ready || !dataUrl) return;
+    const image = await loadImage(dataUrl).catch(() => null);
+    if (!image) return;
+    reset(this.paint.ctx);
+    this.paint.ctx.clearRect(0, 0, this.w, this.h);
+    this.paint.ctx.drawImage(image, 0, 0, this.w, this.h);
+    this.undoStack.length = 0;
+    this.redoStack.length = 0;
+    this.render();
+    this.emit();
+    this.emitPaint();
+  }
+
+  /** Share of the paintable area that carries paint, 0..1. */
+  progress(): PaintProgress {
+    if (!this.ready) return { painted: 0, total: 0, ratio: 0 };
+    const data = this.paint.ctx.getImageData(0, 0, this.w, this.h).data;
+    let total = 0;
+    let painted = 0;
+    for (let i = 0; i < this.labels.length; i++) {
+      if (!this.labels[i]) continue;
+      total++;
+      if (data[i * 4 + 3] !== 0) painted++;
+    }
+    return { painted, total, ratio: total ? painted / total : 0 };
+  }
+
+  get aspect(): number {
+    return this.h ? this.w / this.h : 1;
   }
 
   private async pickSource(svgUrl: string, pngUrl: string): Promise<{ image: HTMLImageElement; keyWhite: boolean }> {
@@ -248,6 +327,11 @@ export class ColoringBook {
     this.onHistory?.();
   }
 
+  private emitPaint(): void {
+    if (!this.onPaint) return;
+    this.onPaint(this.progress());
+  }
+
   private pushUndo(): void {
     this.redoStack.length = 0;
     this.undoStack.push(this.paint.ctx.getImageData(0, 0, this.w, this.h));
@@ -265,11 +349,12 @@ export class ColoringBook {
 
   private layout(): void {
     if (!this.w) return;
-    const style = getComputedStyle(this.stage);
+    const parent = this.stage.parentElement ?? this.stage;
+    const style = getComputedStyle(parent);
     const padX = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
     const padY = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
-    const maxW = this.stage.clientWidth - padX;
-    const maxH = this.stage.clientHeight - padY;
+    const maxW = parent.clientWidth - padX;
+    const maxH = parent.clientHeight - padY;
     if (maxW < 8 || maxH < 8) return;
     const aspect = this.w / this.h;
     let cssW = maxW;
@@ -278,12 +363,12 @@ export class ColoringBook {
       cssH = maxH;
       cssW = cssH * aspect;
     }
-    const left = Number.parseFloat(style.paddingLeft) + (maxW - cssW) / 2;
-    const top = Number.parseFloat(style.paddingTop);
-    this.view.style.width = `${cssW}px`;
-    this.view.style.height = `${cssH}px`;
-    this.view.style.left = `${left}px`;
-    this.view.style.top = `${top}px`;
+    this.stage.style.width = `${cssW}px`;
+    this.stage.style.height = `${cssH}px`;
+    this.view.style.width = "100%";
+    this.view.style.height = "100%";
+    this.view.style.left = "0";
+    this.view.style.top = "0";
   }
 
   private cssScale(): number {
@@ -427,6 +512,7 @@ export class ColoringBook {
     this.pushUndo();
     this.paint.ctx.putImageData(image, 0, 0);
     this.render();
+    this.emitPaint();
   }
 
   private finishStroke(): void {
@@ -450,6 +536,7 @@ export class ColoringBook {
     this.last = null;
     this.hasDab = false;
     this.render();
+    this.emitPaint();
   }
 
   private onPointerDown = (event: PointerEvent): void => {
