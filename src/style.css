@@ -593,6 +593,11 @@ p {
 .dock {
   display: grid;
   gap: 8px;
+  /* On a tablet the four tools would stretch to 196dp each. The document
+     caps the paint chrome at a comfortable thumb span instead. */
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
 }
 
 .tools {
@@ -1294,6 +1299,25 @@ p {
 
   .gallery {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  /* The palette opens into two rows of seven so every colour is visible
+     without scrolling — the only place the document allows that. */
+  .palette {
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: center;
+    overflow-x: visible;
+    min-height: 96px;
+  }
+
+  .swatch {
+    width: 72px;
+    height: 72px;
+  }
+
+  .tool {
+    min-height: 88px;
   }
 
   .menu__grid {
