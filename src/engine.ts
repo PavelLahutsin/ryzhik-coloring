@@ -1,12 +1,11 @@
-import { closeGaps, labelRegions, nearestLabel, paintLabel } from "./regions";
+import { buildRegionLabels, nearestLabel, paintLabel } from "./regions";
 
 export type Tool = "fill" | "pencil" | "brush" | "marker" | "eraser";
 
 const TARGET_WIDTH = 1280;
-const GAP_RADIUS = 2;
 const HISTORY_LIMIT = 10;
-/** Semi-transparent edge pixels still count as the outline. */
-const ALPHA_WALL = 72;
+/** Pixels darker than this are the line art, not empty paper. */
+const INK_ALPHA = 72;
 
 type Rgb = { r: number; g: number; b: number };
 type Layer = { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D };
@@ -138,16 +137,14 @@ export class ColoringBook {
 
     await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
     this.drawLines(source.image, source.keyWhite);
-    const barrier = this.readBarrier();
-    const ink = barrier.reduce((sum, value) => sum + value, 0) / barrier.length;
+    let alpha = this.readAlpha();
+    const ink = alpha.reduce((sum, value) => sum + (value > INK_ALPHA ? 1 : 0), 0) / alpha.length;
     if (ink > 0.45 && !source.keyWhite) {
       const png = await loadImage(pngUrl);
       this.drawLines(png, true);
-      const retry = this.readBarrier();
-      this.labels = labelRegions(closeGaps(retry, this.w, this.h, GAP_RADIUS), this.w, this.h);
-    } else {
-      this.labels = labelRegions(closeGaps(barrier, this.w, this.h, GAP_RADIUS), this.w, this.h);
+      alpha = this.readAlpha();
     }
+    this.labels = buildRegionLabels(alpha, this.w, this.h);
 
     this.ready = true;
     this.layout();
@@ -240,13 +237,11 @@ export class ColoringBook {
     this.lines.ctx.putImageData(pixels, 0, 0);
   }
 
-  private readBarrier(): Uint8Array {
+  private readAlpha(): Uint8Array {
     const pixels = this.lines.ctx.getImageData(0, 0, this.w, this.h).data;
-    const barrier = new Uint8Array(this.w * this.h);
-    for (let i = 0, p = 3; i < barrier.length; i++, p += 4) {
-      barrier[i] = pixels[p] > ALPHA_WALL ? 1 : 0;
-    }
-    return barrier;
+    const alpha = new Uint8Array(this.w * this.h);
+    for (let i = 0, p = 3; i < alpha.length; i++, p += 4) alpha[i] = pixels[p];
+    return alpha;
   }
 
   private emit(): void {
