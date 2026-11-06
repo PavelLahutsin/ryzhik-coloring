@@ -1,9 +1,19 @@
 /**
  * Region map for the coloring page.
- * Black line pixels are walls. Small gaps in the outline are closed so
- * a fill does not leak through a break of a couple of pixels.
- * Labels are 4-connected: 0 is a wall, any other number is a paintable area.
+ * Solid ink separates meaningful areas (eyes, star, apple, inner ear).
+ * Soft gray edges are painted too, so a fill meets the black line without a
+ * white halo. Pockets smaller than a tuft gap join the region around them.
+ * Labels are 4-connected: 0 is solid ink, any other number is paintable.
  */
+
+const SOFT_ALPHA = 72;
+const HARD_ALPHA = 200;
+const GAP_RADIUS = 2;
+/** Fur-tuft pockets are smaller than this; eyes and the inner ear are larger. */
+const MIN_REGION_AREA = 560;
+const ABSORB_RADIUS = 10;
+/** Spikes narrower than about two strokes of this radius join the area beside them. */
+const TRIM_RADIUS = 2;
 
 function dilate(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
   const tmp = new Uint8Array(src.length);
@@ -152,6 +162,285 @@ export function paintLabel(
     }
   }
   return changed;
+}
+
+/**
+ * Walls for connectivity, then small pockets join a neighbor, then the
+ * anti-aliased fringe is claimed so color runs under the gray edge of a line.
+ */
+export function buildRegionLabels(alpha: Uint8Array, w: number, h: number): Uint32Array {
+  const soft = new Uint8Array(alpha.length);
+  for (let i = 0; i < alpha.length; i++) soft[i] = alpha[i] > SOFT_ALPHA ? 1 : 0;
+  const labels = labelRegions(closeGaps(soft, w, h, GAP_RADIUS), w, h);
+  absorbSmall(labels, w, h, MIN_REGION_AREA);
+  trimPeninsulas(labels, w, h, TRIM_RADIUS);
+  claimFringe(labels, alpha, w, h, HARD_ALPHA);
+  claimEnclosed(labels, alpha, w, h, HARD_ALPHA, ABSORB_RADIUS);
+  return labels;
+}
+
+function absorbSmall(labels: Uint32Array, w: number, h: number, minArea: number): void {
+  let maxLabel = 0;
+  for (let i = 0; i < labels.length; i++) if (labels[i] > maxLabel) maxLabel = labels[i];
+  const area = new Uint32Array(maxLabel + 1);
+  for (let i = 0; i < labels.length; i++) area[labels[i]]++;
+
+  let background = labels[0];
+  if (!background) {
+    for (let i = 0; i < labels.length; i++) {
+      const id = labels[i];
+      if (id && area[id] > area[background]) background = id;
+    }
+  }
+
+  // One destination per small region. A large region is never moved.
+  const target = new Int32Array(maxLabel + 1);
+  const targetScore = new Uint32Array(maxLabel + 1);
+  const votes = new Uint32Array(maxLabel + 1);
+  const seen = new Int32Array(48);
+  const r2 = ABSORB_RADIUS * ABSORB_RADIUS;
+
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) {
+      const i = row + x;
+      const id = labels[i];
+      if (!id || area[id] >= minArea) continue;
+      const left = x > 0 ? labels[i - 1] : 0;
+      const right = x + 1 < w ? labels[i + 1] : 0;
+      const up = y > 0 ? labels[i - w] : 0;
+      const down = y + 1 < h ? labels[i + w] : 0;
+      if (left === id && right === id && up === id && down === id) continue;
+
+      let seenCount = 0;
+      let best = 0;
+      let bestVotes = 0;
+      const y0 = Math.max(0, y - ABSORB_RADIUS);
+      const y1 = Math.min(h - 1, y + ABSORB_RADIUS);
+      const x0 = Math.max(0, x - ABSORB_RADIUS);
+      const x1 = Math.min(w - 1, x + ABSORB_RADIUS);
+      for (let yy = y0; yy <= y1; yy++) {
+        const dy = yy - y;
+        const nRow = yy * w;
+        for (let xx = x0; xx <= x1; xx++) {
+          const dx = xx - x;
+          if (dx * dx + dy * dy > r2) continue;
+          const other = labels[nRow + xx];
+          if (!other || other === id) continue;
+          if (!votes[other]) {
+            if (seenCount >= seen.length) continue;
+            seen[seenCount++] = other;
+          }
+          votes[other]++;
+        }
+      }
+      for (let s = 0; s < seenCount; s++) {
+        const other = seen[s];
+        const count = votes[other];
+        votes[other] = 0;
+        const prefer = other !== background && (best === 0 || best === background || count > bestVotes);
+        const moreBg = other === background && best === 0;
+        if (prefer || moreBg || (other !== background && best !== background && count > bestVotes)) {
+          best = other;
+          bestVotes = count;
+        }
+      }
+      if (!best) continue;
+      const score = bestVotes + (best === background ? 0 : 1_000_000);
+      if (score > targetScore[id]) {
+        target[id] = best;
+        targetScore[id] = score;
+      }
+    }
+  }
+
+  const parent = new Int32Array(maxLabel + 1);
+  for (let id = 0; id <= maxLabel; id++) parent[id] = id;
+  for (let id = 1; id <= maxLabel; id++) {
+    const dest = target[id];
+    if (!dest || area[id] >= minArea) continue;
+    // Attach a pocket only to a bigger area, so regions can't point at each other.
+    if (area[dest] < area[id] || (area[dest] === area[id] && dest > id)) continue;
+    parent[id] = dest;
+  }
+  const find = (a: number): number => {
+    let root = a;
+    while (parent[root] !== root) root = parent[root];
+    while (a !== root) {
+      const next = parent[a];
+      parent[a] = root;
+      a = next;
+    }
+    return root;
+  };
+  for (let i = 0; i < labels.length; i++) {
+    if (labels[i]) labels[i] = find(labels[i]);
+  }
+}
+
+/**
+ * Shave thin spikes and inlets off every region (fur gaps, 1px paper leaks)
+ * and hand those pixels to the neighboring area.
+ */
+function trimPeninsulas(labels: Uint32Array, w: number, h: number, radius: number): void {
+  const eroded = new Uint32Array(labels.length);
+  const tmp = new Uint32Array(labels.length);
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) {
+      const id = labels[row + x];
+      if (!id || x - radius < 0 || x + radius >= w) continue;
+      let ok = true;
+      for (let xx = x - radius; xx <= x + radius; xx++) {
+        if (labels[row + xx] !== id) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) tmp[row + x] = id;
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      const id = tmp[y * w + x];
+      if (!id || y - radius < 0 || y + radius >= h) continue;
+      let ok = true;
+      for (let yy = y - radius; yy <= y + radius; yy++) {
+        if (tmp[yy * w + x] !== id) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) eroded[y * w + x] = id;
+    }
+  }
+
+  const original = labels.slice();
+  for (let i = 0; i < labels.length; i++) {
+    const id = original[i];
+    if (!id) continue;
+    const y = (i / w) | 0;
+    const x = i - y * w;
+    const y0 = Math.max(0, y - radius);
+    const y1 = Math.min(h - 1, y + radius);
+    const x0 = Math.max(0, x - radius);
+    const x1 = Math.min(w - 1, x + radius);
+    let keep = false;
+    for (let yy = y0; yy <= y1 && !keep; yy++) {
+      const row = yy * w;
+      for (let xx = x0; xx <= x1; xx++) {
+        if (eroded[row + xx] === id) {
+          keep = true;
+          break;
+        }
+      }
+    }
+    if (!keep) labels[i] = 0;
+  }
+
+  const handed = new Uint32Array(labels.length);
+  const search = radius + 8;
+  const search2 = search * search;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const previous = original[i];
+      if (!previous || labels[i]) continue;
+      let best = 0;
+      let bestD = search2 + 1;
+      const y0 = Math.max(0, y - search);
+      const y1 = Math.min(h - 1, y + search);
+      const x0 = Math.max(0, x - search);
+      const x1 = Math.min(w - 1, x + search);
+      for (let yy = y0; yy <= y1; yy++) {
+        const dy = yy - y;
+        const row = yy * w;
+        for (let xx = x0; xx <= x1; xx++) {
+          const dx = xx - x;
+          const dist = dx * dx + dy * dy;
+          if (dist === 0 || dist > search2 || dist >= bestD) continue;
+          const other = labels[row + xx];
+          if (!other || other === previous) continue;
+          best = other;
+          bestD = dist;
+        }
+      }
+      handed[i] = best || previous;
+    }
+  }
+  for (let i = 0; i < labels.length; i++) {
+    if (handed[i]) labels[i] = handed[i];
+  }
+}
+
+/** Holes sealed inside solid ink still take the color of the area around them. */
+function claimEnclosed(
+  labels: Uint32Array,
+  alpha: Uint8Array,
+  w: number,
+  h: number,
+  hardAlpha: number,
+  radius: number,
+): void {
+  const r2 = radius * radius;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (labels[i] || alpha[i] >= hardAlpha) continue;
+      let best = 0;
+      let bestD = r2 + 1;
+      const y0 = Math.max(0, y - radius);
+      const y1 = Math.min(h - 1, y + radius);
+      const x0 = Math.max(0, x - radius);
+      const x1 = Math.min(w - 1, x + radius);
+      for (let yy = y0; yy <= y1; yy++) {
+        const dy = yy - y;
+        const row = yy * w;
+        for (let xx = x0; xx <= x1; xx++) {
+          const dx = xx - x;
+          const dist = dx * dx + dy * dy;
+          if (dist === 0 || dist > r2 || dist >= bestD) continue;
+          const other = labels[row + xx];
+          if (!other) continue;
+          best = other;
+          bestD = dist;
+        }
+      }
+      if (best) labels[i] = best;
+    }
+  }
+}
+
+/** Give every soft edge pixel to the nearest already-labeled region. Solid ink stays 0. */
+function claimFringe(
+  labels: Uint32Array,
+  alpha: Uint8Array,
+  w: number,
+  h: number,
+  hardAlpha: number,
+): void {
+  const queue = new Int32Array(labels.length);
+  let head = 0;
+  let tail = 0;
+  for (let i = 0; i < labels.length; i++) {
+    if (labels[i]) queue[tail++] = i;
+  }
+  while (head < tail) {
+    const i = queue[head++];
+    const y = (i / w) | 0;
+    const x = i - y * w;
+    const id = labels[i];
+    if (x > 0) enqueue(i - 1, id);
+    if (x + 1 < w) enqueue(i + 1, id);
+    if (y > 0) enqueue(i - w, id);
+    if (y + 1 < h) enqueue(i + w, id);
+  }
+
+  function enqueue(n: number, id: number): void {
+    if (labels[n] || alpha[n] >= hardAlpha) return;
+    labels[n] = id;
+    queue[tail++] = n;
+  }
 }
 
 /** Exact pixel first, otherwise the closest paintable pixel within radius. */
