@@ -16,19 +16,33 @@ import { topbar } from "../ui/topbar";
  */
 const PALETTE = [
   { name: "Красный", hex: "#ff4b4b" },
+  { name: "Тёмно-красный", hex: "#d62828" },
   { name: "Оранжевый", hex: "#ff8a3d" },
-  { name: "Жёлтый", hex: "#ffc94a" },
+  { name: "Персиковый", hex: "#ffb07a", light: true },
+  { name: "Бежевый", hex: "#f3d2b3", light: true },
+  { name: "Золотой", hex: "#ffc94a" },
+  { name: "Светло-жёлтый", hex: "#ffe08a", light: true },
+  { name: "Салатовый", hex: "#c6e04a" },
+  { name: "Светло-зелёный", hex: "#8be08a" },
   { name: "Зелёный", hex: "#3cbf4a" },
-  { name: "Голубой", hex: "#63d2ff" },
-  { name: "Синий", hex: "#4c8dff" },
-  { name: "Фиолетовый", hex: "#a878ff" },
-  { name: "Розовый", hex: "#ff7eb6" },
-  { name: "Коричневый", hex: "#a56a3c" },
+  { name: "Тёмно-зелёный", hex: "#1f8a3b" },
   { name: "Изумрудный", hex: "#1e8e71" },
-  { name: "Персиковый", hex: "#ffb07a" },
-  { name: "Белый", hex: "#ffffff" },
-  { name: "Тёмный", hex: "#2a211c" },
-  { name: "Чёрный", hex: "#000000" },
+  { name: "Тёмно-изумрудный", hex: "#12654f" },
+  { name: "Голубой", hex: "#7ad7ff" },
+  { name: "Бирюзовый", hex: "#3ec6c6" },
+  { name: "Синий", hex: "#4c8dff" },
+  { name: "Тёмно-синий", hex: "#2a5bd7" },
+  { name: "Сиреневый", hex: "#c9a6ff" },
+  { name: "Фиолетовый", hex: "#a878ff" },
+  { name: "Тёмно-фиолетовый", hex: "#7a45d1" },
+  { name: "Розовый", hex: "#ff7eb6" },
+  { name: "Светло-розовый", hex: "#ffb3d4", light: true },
+  { name: "Светло-коричневый", hex: "#c4844a" },
+  { name: "Коричневый", hex: "#a56a3c" },
+  { name: "Тёмно-коричневый", hex: "#6b3e22" },
+  { name: "Серый", hex: "#b9b1a8", light: true },
+  { name: "Белый", hex: "#ffffff", light: true },
+  { name: "Чёрный", hex: "#2a211c" },
 ];
 
 const DONE_RATIO = 0.85;
@@ -249,7 +263,7 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
 
   const renderPalette = (): void => {
     for (const entry of PALETTE) {
-      const light = entry.hex === "#ffffff";
+      const light = entry.light === true || entry.hex === "#ffffff";
       paletteRow.append(
         el("button", {
           class: `swatch${light ? " swatch--light" : ""}${entry.hex === color ? " is-active" : ""}`,
