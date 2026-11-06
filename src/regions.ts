@@ -8,9 +8,15 @@
 
 const SOFT_ALPHA = 72;
 const HARD_ALPHA = 200;
-const GAP_RADIUS = 2;
-/** Fur-tuft pockets are smaller than this; eyes and the inner ear are larger. */
+/** Bridges breaks of a few pixels in the outline. The drawn lines are unchanged. */
+const GAP_RADIUS = 4;
+/**
+ * Thin pockets below this join the area around them.
+ * A compact blob (the bear's small eye) is kept even when it is under this size.
+ */
 const MIN_REGION_AREA = 560;
+const KEEP_COMPACT_AREA = 160;
+const KEEP_COMPACT_SIDE = 12;
 const ABSORB_RADIUS = 10;
 /** Spikes narrower than about two strokes of this radius join the area beside them. */
 const TRIM_RADIUS = 2;
@@ -183,7 +189,30 @@ function absorbSmall(labels: Uint32Array, w: number, h: number, minArea: number)
   let maxLabel = 0;
   for (let i = 0; i < labels.length; i++) if (labels[i] > maxLabel) maxLabel = labels[i];
   const area = new Uint32Array(maxLabel + 1);
-  for (let i = 0; i < labels.length; i++) area[labels[i]]++;
+  const minX = new Int32Array(maxLabel + 1);
+  const maxX = new Int32Array(maxLabel + 1);
+  const minY = new Int32Array(maxLabel + 1);
+  const maxY = new Int32Array(maxLabel + 1);
+  minX.fill(w);
+  minY.fill(h);
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) {
+      const id = labels[row + x];
+      if (!id) continue;
+      area[id]++;
+      if (x < minX[id]) minX[id] = x;
+      if (x > maxX[id]) maxX[id] = x;
+      if (y < minY[id]) minY[id] = y;
+      if (y > maxY[id]) maxY[id] = y;
+    }
+  }
+
+  const keep = (id: number): boolean => {
+    if (!id || area[id] === 0 || area[id] >= minArea) return true;
+    const short = Math.min(maxX[id] - minX[id], maxY[id] - minY[id]) + 1;
+    return area[id] >= KEEP_COMPACT_AREA && short >= KEEP_COMPACT_SIDE;
+  };
 
   let background = labels[0];
   if (!background) {
@@ -205,7 +234,7 @@ function absorbSmall(labels: Uint32Array, w: number, h: number, minArea: number)
     for (let x = 0; x < w; x++) {
       const i = row + x;
       const id = labels[i];
-      if (!id || area[id] >= minArea) continue;
+      if (keep(id)) continue;
       const left = x > 0 ? labels[i - 1] : 0;
       const right = x + 1 < w ? labels[i + 1] : 0;
       const up = y > 0 ? labels[i - w] : 0;
@@ -258,7 +287,7 @@ function absorbSmall(labels: Uint32Array, w: number, h: number, minArea: number)
   for (let id = 0; id <= maxLabel; id++) parent[id] = id;
   for (let id = 1; id <= maxLabel; id++) {
     const dest = target[id];
-    if (!dest || area[id] >= minArea) continue;
+    if (!dest || keep(id)) continue;
     // Attach a pocket only to a bigger area, so regions can't point at each other.
     if (area[dest] < area[id] || (area[dest] === area[id] && dest > id)) continue;
     parent[id] = dest;

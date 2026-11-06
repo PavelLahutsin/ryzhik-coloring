@@ -509,8 +509,37 @@ p {
   height: 100dvh;
   min-height: 0;
   overflow: hidden;
-  padding: 8px;
-  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  padding: 6px;
+  padding-bottom: calc(6px + env(safe-area-inset-bottom));
+}
+
+/* Five controls (back, undo, redo, done, home) must stay on screen at 360dp.
+   The picture title is for adults and is read by the button names instead. */
+.topbar--paint {
+  gap: 6px;
+  min-width: 0;
+}
+
+.topbar--paint .topbar__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.topbar--paint .topbar__trailing {
+  gap: 6px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.topbar--paint .btn--done {
+  flex: none;
 }
 
 .paint > .topbar,
@@ -522,17 +551,19 @@ p {
   position: relative;
   flex: 1;
   min-height: 0;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 4px;
+  background: transparent;
   overflow: hidden;
 }
 
 .paint__stage {
-  position: absolute;
-  inset: 0;
-  padding: 10px;
+  position: relative;
+  flex: none;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .sheet {
@@ -540,7 +571,8 @@ p {
   top: 0;
   left: 0;
   background: #fff;
-  border-radius: 8px;
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
   touch-action: none;
 }
 
@@ -1235,6 +1267,26 @@ p {
  * would squeeze the tools under 64dp. Instead the chrome stacks: canvas on
  * top, palette and tools in two compact rows below. Targets stay >= 64dp.
  */
+@media (max-width: 520px) {
+  .topbar--paint .btn--done {
+    width: var(--tap);
+    min-width: var(--tap);
+    padding: 0;
+  }
+
+  .topbar--paint .btn--done .btn__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
 @media (orientation: landscape) and (max-height: 560px) {
   .paint {
     gap: 6px;

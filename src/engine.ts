@@ -349,11 +349,12 @@ export class ColoringBook {
 
   private layout(): void {
     if (!this.w) return;
-    const style = getComputedStyle(this.stage);
+    const parent = this.stage.parentElement ?? this.stage;
+    const style = getComputedStyle(parent);
     const padX = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
     const padY = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
-    const maxW = this.stage.clientWidth - padX;
-    const maxH = this.stage.clientHeight - padY;
+    const maxW = parent.clientWidth - padX;
+    const maxH = parent.clientHeight - padY;
     if (maxW < 8 || maxH < 8) return;
     const aspect = this.w / this.h;
     let cssW = maxW;
@@ -362,13 +363,12 @@ export class ColoringBook {
       cssH = maxH;
       cssW = cssH * aspect;
     }
-    const left = Number.parseFloat(style.paddingLeft) + (maxW - cssW) / 2;
-    // Centred vertically too, so a 16:9 sheet sits in the middle of a tablet.
-    const top = Number.parseFloat(style.paddingTop) + (maxH - cssH) / 2;
-    this.view.style.width = `${cssW}px`;
-    this.view.style.height = `${cssH}px`;
-    this.view.style.left = `${left}px`;
-    this.view.style.top = `${top}px`;
+    this.stage.style.width = `${cssW}px`;
+    this.stage.style.height = `${cssH}px`;
+    this.view.style.width = "100%";
+    this.view.style.height = "100%";
+    this.view.style.left = "0";
+    this.view.style.top = "0";
   }
 
   private cssScale(): number {

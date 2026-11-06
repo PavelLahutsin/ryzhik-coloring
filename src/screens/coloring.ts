@@ -63,7 +63,7 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
   );
   const doneBtn = el(
     "button",
-    { class: "btn btn--done", attrs: { type: "button" } },
+    { class: "btn btn--done", attrs: { type: "button", "aria-label": "Готово" } },
     [icon("check", 26), el("span", { class: "btn__label", text: "Готово" })],
   );
 
