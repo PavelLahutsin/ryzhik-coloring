@@ -2,8 +2,9 @@
  * Region map for the coloring page.
  * Solid ink separates meaningful areas (eyes, star, apple, inner ear).
  * Soft gray edges are painted too, so a fill meets the black line without a
- * white halo. Pockets smaller than a tuft gap join the region around them.
- * Labels are 4-connected: 0 is solid ink, any other number is paintable.
+ * white halo. Small unlined pockets may join a neighbor, but regions bounded
+ * by real ink are retained even when narrow or small. Labels are 4-connected:
+ * 0 is solid ink, any other number is paintable.
  */
 
 const SOFT_ALPHA = 72;
@@ -177,18 +178,146 @@ export function paintLabel(
 export function buildRegionLabels(alpha: Uint8Array, w: number, h: number): Uint32Array {
   const soft = new Uint8Array(alpha.length);
   for (let i = 0; i < alpha.length; i++) soft[i] = alpha[i] > SOFT_ALPHA ? 1 : 0;
-  const labels = labelRegions(closeGaps(soft, w, h, GAP_RADIUS), w, h);
-  absorbSmall(labels, w, h, MIN_REGION_AREA);
+  const closed = closeGaps(soft, w, h, GAP_RADIUS);
+  const labels = labelRegions(closed, w, h);
+  // Closing is only a connectivity aid. A synthetic wall with no nearby ink
+  // in the source raster is not a real boundary: join the labels it created.
+  // Genuine lines (including short endpoint gaps) retain source-mask evidence.
+  mergeUninkedInterfaces(labels, soft, closed, w, h);
+  absorbSmall(labels, w, h, MIN_REGION_AREA, soft);
   trimPeninsulas(labels, w, h, TRIM_RADIUS);
   claimFringe(labels, alpha, w, h, HARD_ALPHA);
   claimEnclosed(labels, alpha, w, h, HARD_ALPHA, ABSORB_RADIUS);
+  // Fringe claiming and pocket cleanup can leave two IDs touching on white
+  // pixels. Such a seam has no real line in the source, so it is not a region
+  // boundary (notably on the unlined cheek area).
+  mergeAdjacentWithoutInk(labels, soft, w, h);
   return labels;
 }
 
-function absorbSmall(labels: Uint32Array, w: number, h: number, minArea: number): void {
+/**
+ * Undo false partitions introduced by morphology. We inspect only pixels added
+ * by closing and merge the labels on their sides only when the original line
+ * mask has no nearby evidence. This deliberately leaves visible ink boundaries
+ * and short line-end gaps protected by their nearby original stroke pixels.
+ */
+function mergeUninkedInterfaces(
+  labels: Uint32Array,
+  source: Uint8Array,
+  closed: Uint8Array,
+  w: number,
+  h: number,
+): void {
+  let maxLabel = 0;
+  for (const id of labels) if (id > maxLabel) maxLabel = id;
+  if (maxLabel < 2) return;
+  const parent = new Uint32Array(maxLabel + 1);
+  for (let id = 0; id <= maxLabel; id++) parent[id] = id;
+  const find = (id: number): number => {
+    let root = id;
+    while (parent[root] !== root) root = parent[root];
+    while (parent[id] !== id) {
+      const next = parent[id];
+      parent[id] = root;
+      id = next;
+    }
+    return root;
+  };
+  const union = (a: number, b: number): void => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[rb] = ra;
+  };
+  const evidenceRadius = GAP_RADIUS + 1;
+  const searchRadius = GAP_RADIUS + 1;
+  const nearby = new Uint32Array((searchRadius * 2 + 1) ** 2);
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!closed[i] || source[i]) continue;
+      let hasSourceInk = false;
+      const ey0 = Math.max(0, y - evidenceRadius);
+      const ey1 = Math.min(h - 1, y + evidenceRadius);
+      const ex0 = Math.max(0, x - evidenceRadius);
+      const ex1 = Math.min(w - 1, x + evidenceRadius);
+      for (let yy = ey0; yy <= ey1 && !hasSourceInk; yy++) {
+        const row = yy * w;
+        for (let xx = ex0; xx <= ex1; xx++) {
+          if (source[row + xx]) { hasSourceInk = true; break; }
+        }
+      }
+      if (hasSourceInk) continue;
+
+      let count = 0;
+      const y0 = Math.max(0, y - searchRadius);
+      const y1 = Math.min(h - 1, y + searchRadius);
+      const x0 = Math.max(0, x - searchRadius);
+      const x1 = Math.min(w - 1, x + searchRadius);
+      for (let yy = y0; yy <= y1; yy++) {
+        const row = yy * w;
+        for (let xx = x0; xx <= x1; xx++) {
+          const id = labels[row + xx];
+          if (!id) continue;
+          let exists = false;
+          for (let n = 0; n < count; n++) if (nearby[n] === id) { exists = true; break; }
+          if (!exists) nearby[count++] = id;
+        }
+      }
+      if (count < 2) continue;
+      for (let n = 1; n < count; n++) union(nearby[0], nearby[n]);
+    }
+  }
+  for (let i = 0; i < labels.length; i++) if (labels[i]) labels[i] = find(labels[i]);
+}
+
+function mergeAdjacentWithoutInk(labels: Uint32Array, source: Uint8Array, w: number, h: number): void {
+  let maxLabel = 0;
+  for (const id of labels) if (id > maxLabel) maxLabel = id;
+  if (maxLabel < 2) return;
+  const parent = new Uint32Array(maxLabel + 1);
+  for (let id = 0; id <= maxLabel; id++) parent[id] = id;
+  const find = (id: number): number => {
+    let root = id;
+    while (parent[root] !== root) root = parent[root];
+    while (parent[id] !== id) {
+      const next = parent[id];
+      parent[id] = root;
+      id = next;
+    }
+    return root;
+  };
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) {
+      const i = row + x;
+      const a = labels[i];
+      if (!a || source[i]) continue;
+      if (x + 1 < w) {
+        const b = labels[i + 1];
+        if (b && b !== a && !source[i + 1]) {
+          const ra = find(a); const rb = find(b);
+          if (ra !== rb) parent[rb] = ra;
+        }
+      }
+      if (y + 1 < h) {
+        const b = labels[i + w];
+        if (b && b !== a && !source[i + w]) {
+          const ra = find(a); const rb = find(b);
+          if (ra !== rb) parent[rb] = ra;
+        }
+      }
+    }
+  }
+  for (let i = 0; i < labels.length; i++) if (labels[i]) labels[i] = find(labels[i]);
+}
+
+function absorbSmall(labels: Uint32Array, w: number, h: number, minArea: number, source: Uint8Array): void {
   let maxLabel = 0;
   for (let i = 0; i < labels.length; i++) if (labels[i] > maxLabel) maxLabel = labels[i];
   const area = new Uint32Array(maxLabel + 1);
+  const perimeter = new Uint32Array(maxLabel + 1);
+  const inkPerimeter = new Uint32Array(maxLabel + 1);
   const minX = new Int32Array(maxLabel + 1);
   const maxX = new Int32Array(maxLabel + 1);
   const minY = new Int32Array(maxLabel + 1);
@@ -201,6 +330,22 @@ function absorbSmall(labels: Uint32Array, w: number, h: number, minArea: number)
       const id = labels[row + x];
       if (!id) continue;
       area[id]++;
+      if (x === 0 || labels[row + x - 1] === 0) {
+        perimeter[id]++;
+        if (x > 0 && source[row + x - 1]) inkPerimeter[id]++;
+      }
+      if (x + 1 === w || labels[row + x + 1] === 0) {
+        perimeter[id]++;
+        if (x + 1 < w && source[row + x + 1]) inkPerimeter[id]++;
+      }
+      if (y === 0 || labels[row + x - w] === 0) {
+        perimeter[id]++;
+        if (y > 0 && source[row + x - w]) inkPerimeter[id]++;
+      }
+      if (y + 1 === h || labels[row + x + w] === 0) {
+        perimeter[id]++;
+        if (y + 1 < h && source[row + x + w]) inkPerimeter[id]++;
+      }
       if (x < minX[id]) minX[id] = x;
       if (x > maxX[id]) maxX[id] = x;
       if (y < minY[id]) minY[id] = y;
@@ -211,6 +356,10 @@ function absorbSmall(labels: Uint32Array, w: number, h: number, minArea: number)
   const keep = (id: number): boolean => {
     if (!id || area[id] === 0 || area[id] >= minArea) return true;
     const short = Math.min(maxX[id] - minX[id], maxY[id] - minY[id]) + 1;
+    const realLineRatio = perimeter[id] ? inkPerimeter[id] / perimeter[id] : 0;
+    // A genuinely ink-bounded part (e.g. a hand, eye, apple or clothing strap)
+    // must not be swallowed just because it has a small or narrow silhouette.
+    if (inkPerimeter[id] >= 12 && realLineRatio >= 0.12) return true;
     return area[id] >= KEEP_COMPACT_AREA && short >= KEEP_COMPACT_SIDE;
   };
 

@@ -11,13 +11,16 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "smoke": "node scripts/smoke.mjs",
-    "shots": "node scripts/shots.mjs"
+    "shots": "node scripts/shots.mjs",
+    "regions:qa": "tsx scripts/regions-qa.mjs"
   },
   "dependencies": {
     "@fontsource/comfortaa": "^5.2.8",
     "@fontsource/nunito": "^5.2.7"
   },
   "devDependencies": {
+    "sharp": "^0.35.5",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^7.2.2"
   }

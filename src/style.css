@@ -760,26 +760,20 @@ p {
 }
 
 .palette {
-  display: flex;
+  display: grid;
   flex: none;
-  gap: 10px;
-  min-height: 80px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  justify-items: center;
+  gap: 6px;
+  min-height: 0;
   padding: 6px 4px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x proximity;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-
-.palette::-webkit-scrollbar {
-  display: none;
+  overflow: visible;
 }
 
 .swatch {
-  flex: none;
-  width: 64px;
-  height: 64px;
+  width: min(100%, 44px);
+  aspect-ratio: 1;
+  height: auto;
   padding: 0;
   cursor: pointer;
   border: 3px solid transparent;
@@ -1321,8 +1315,13 @@ p {
   }
 
   .palette {
-    min-height: 72px;
-    height: 72px;
+    gap: 4px;
+    min-height: 0;
+    height: auto;
+  }
+
+  .palette .swatch {
+    width: min(100%, 36px);
   }
 
   .paint__hint {
@@ -1353,19 +1352,14 @@ p {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  /* The palette opens into two rows of seven so every colour is visible
-     without scrolling — the only place the document allows that. */
+  /* Four rows of seven keep the complete 28-colour palette visible. */
   .palette {
-    flex-wrap: wrap;
-    justify-content: center;
-    align-content: center;
-    overflow-x: visible;
-    min-height: 96px;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .swatch {
-    width: 72px;
-    height: 72px;
+    width: min(100%, 64px);
   }
 
   .tool {
