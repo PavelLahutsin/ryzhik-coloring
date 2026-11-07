@@ -2,8 +2,8 @@ import albumsJson from "./albums.json";
 
 /**
  * Album data lives in one JSON file: album -> pictures. Adding a picture means
- * dropping `src/assets/pictures/<id>.svg` (and an optional `<id>.png` fallback)
- * plus one entry here — nothing else in the app knows the ids.
+ * dropping `src/assets/pictures/<id>.svg` (and an optional `<id>.png` fallback),
+ * one entry here, then `npm run regions` for the QA report.
  */
 export type PictureEntry = {
   id: string;
@@ -45,11 +45,14 @@ const svgFiles = import.meta.glob<string>("../assets/pictures/*.svg", {
   query: "?url",
   import: "default",
 });
-const pngFiles = import.meta.glob<string>("../assets/pictures/*.png", {
-  eager: true,
-  query: "?url",
-  import: "default",
-});
+const pngFiles = import.meta.glob<string>(
+  ["../assets/pictures/*.png", "!../assets/pictures/*.regions.png"],
+  {
+    eager: true,
+    query: "?url",
+    import: "default",
+  },
+);
 
 function byName(files: Record<string, string>, ext: string): Map<string, string> {
   const map = new Map<string, string>();

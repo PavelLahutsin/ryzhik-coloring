@@ -1,8 +1,8 @@
-import { buildRegionLabels, nearestLabel, paintLabel } from "./regions";
+import { REGION_RASTER_WIDTH, buildRegionLabels, nearestLabel, paintLabel } from "./regions";
 
 export type Tool = "fill" | "pencil" | "brush" | "marker" | "eraser";
 
-const TARGET_WIDTH = 1280;
+const TARGET_WIDTH = REGION_RASTER_WIDTH;
 /** Design doc: undo/redo stack of 30 steps. */
 const HISTORY_LIMIT = 30;
 /** Pixels darker than this are the line art, not empty paper. */
