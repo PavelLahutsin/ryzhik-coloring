@@ -15,7 +15,7 @@ export type Settings = {
   magnetLocked: boolean;
   /** Default brush diameter in CSS px, one of BRUSH_SIZES. */
   brushSize: number;
-  /** Sound toggles live here; the sound layer is not wired up yet. */
+  /** Sound toggles. The sound module reads these through `sound.configure`. */
   music: boolean;
   sounds: boolean;
   voice: boolean;

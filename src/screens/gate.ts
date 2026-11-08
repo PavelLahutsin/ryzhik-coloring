@@ -67,11 +67,30 @@ export function renderGate(root: HTMLElement, next: string): () => void {
   let timer = 0;
 
   const question = el("p", { class: "gate__question", text: task.text });
+  const answerBox = el("input", {
+    class: "gate__answer",
+    attrs: {
+      type: "text",
+      inputmode: "numeric",
+      pattern: "[0-9]*",
+      enterkeyhint: "done",
+      autocomplete: "off",
+      autocorrect: "off",
+      maxlength: "4",
+      placeholder: "Ответ",
+      "aria-label": "Ответ",
+    },
+  }) as HTMLInputElement;
   const feedback = el("p", { class: "gate__feedback", attrs: { role: "status" } });
   const keypad = el("div", { class: "gate__keypad" });
 
+  const showAnswer = (): void => {
+    if (answerBox.value !== input) answerBox.value = input;
+  };
+
   const render = (): void => {
     const blocked = state.blockedUntil > Date.now();
+    answerBox.disabled = blocked;
     keypad.replaceChildren();
     const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "back", "0", "ok"];
     for (const key of keys) {
@@ -86,7 +105,14 @@ export function renderGate(root: HTMLElement, next: string): () => void {
             disabled: blocked,
             "aria-label": isBack ? "Стереть" : isOk ? "Проверить" : key,
           },
-          on: { click: () => press(key) },
+          on: {
+            // pointerup, not click: a phone often swallows the click after the
+            // keypad is redrawn, so the digit never appears.
+            pointerup: (event) => {
+              event.preventDefault();
+              press(key);
+            },
+          },
         },
         [
           isBack
@@ -98,6 +124,7 @@ export function renderGate(root: HTMLElement, next: string): () => void {
       );
       keypad.append(btn);
     }
+    showAnswer();
     const seconds = Math.ceil((state.blockedUntil - Date.now()) / 1000);
     feedback.textContent = blocked
       ? `Попробуйте через ${seconds} с`
@@ -108,6 +135,7 @@ export function renderGate(root: HTMLElement, next: string): () => void {
 
   const press = (key: string): void => {
     if (state.blockedUntil > Date.now()) return;
+    input = answerBox.value.replace(/\D/g, "").slice(0, 4);
     if (key === "back") {
       input = input.slice(0, -1);
     } else if (key === "ok") {
@@ -137,6 +165,17 @@ export function renderGate(root: HTMLElement, next: string): () => void {
     render();
   };
 
+  answerBox.addEventListener("input", () => {
+    input = answerBox.value.replace(/\D/g, "").slice(0, 4);
+    if (answerBox.value !== input) answerBox.value = input;
+  });
+  answerBox.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      press("ok");
+    }
+  });
+
   const view = el("div", { class: "screen screen--gate" }, [
     el(
       "header",
@@ -156,6 +195,7 @@ export function renderGate(root: HTMLElement, next: string): () => void {
     el("h1", { class: "gate__title", text: "Этот раздел для взрослых" }),
     el("p", { class: "gate__lead", text: "Сколько будет" }),
     question,
+    answerBox,
     keypad,
     feedback,
   ]);

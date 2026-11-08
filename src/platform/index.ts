@@ -1,25 +1,37 @@
 import { capacitorAdapter } from "./capacitor";
 import type { PlatformAdapter } from "./types";
-import { vkAdapter } from "./vk";
+import { activateVkAdapter, isVkLaunch, vkAdapter } from "./vk";
 import { webAdapter } from "./web";
 
 export type { HapticKind, PlatformAdapter, PlatformStorage, SharePayload } from "./types";
 
+type CapacitorGlobal = {
+  isNativePlatform?: () => boolean;
+  getPlatform?: () => string;
+};
+
 /**
- * Picks the shell the app is running in. Detection is deliberately cheap and
- * has no side effects, so it is safe at module load.
- *
- * When a real VK/Capacitor build appears, replace the placeholder adapters —
- * callers here do not change.
+ * True only inside the Capacitor Android/iOS shell. Loading the Capacitor
+ * script in a browser leaves `isNativePlatform()` false, so the site stays web.
+ */
+function isCapacitorNative(): boolean {
+  const cap = (window as unknown as { Capacitor?: CapacitorGlobal }).Capacitor;
+  if (!cap) return false;
+  if (typeof cap.isNativePlatform === "function") return cap.isNativePlatform() === true;
+  const name = cap.getPlatform?.();
+  return name === "android" || name === "ios";
+}
+
+/**
+ * Native shell, then a real VK launch, otherwise the normal browser.
+ * VK Bridge is started only when `vk_*` launch parameters are present.
  */
 export function detectPlatform(): PlatformAdapter {
-  const win = window as unknown as {
-    Capacitor?: { isNativePlatform?: () => boolean };
-    vkBridge?: unknown;
-  };
-
-  if (win.Capacitor?.isNativePlatform?.()) return capacitorAdapter;
-  if (win.vkBridge) return vkAdapter;
+  if (isCapacitorNative()) return capacitorAdapter;
+  if (isVkLaunch()) {
+    activateVkAdapter();
+    return vkAdapter;
+  }
   return webAdapter;
 }
 

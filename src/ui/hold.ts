@@ -7,6 +7,8 @@ export type HoldOptions = {
   /** ms of continuous press before the action fires. */
   duration?: number;
   onHold: () => void;
+  /** A tap that was released before the hold finished. */
+  onShort?: () => void;
   label: string;
   icon: Node;
 };
@@ -71,8 +73,10 @@ export function holdButton(options: HoldOptions): HTMLButtonElement {
   });
 
   const cancel = (): void => {
+    const releasedEarly = raf !== 0 && !fired;
     if (fired) return;
     stop();
+    if (releasedEarly) options.onShort?.();
   };
   button.addEventListener("pointerup", cancel);
   button.addEventListener("pointercancel", cancel);

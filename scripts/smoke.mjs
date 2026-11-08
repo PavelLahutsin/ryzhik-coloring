@@ -58,7 +58,7 @@ for (const size of SIZES) {
   await page.screenshot({ path: `${OUT}/${size.name}-1-menu.png` });
 
   await page.getByRole("button", { name: "Раскраски" }).click();
-  await page.getByRole("button", { name: "Друзья" }).click();
+  await page.getByRole("button", { name: "Рыжик и его друзья" }).click();
   await page.getByRole("button", { name: "Рыжик и Мишка" }).click();
   await page.waitForSelector(".sheet");
   await page.waitForTimeout(1200);
