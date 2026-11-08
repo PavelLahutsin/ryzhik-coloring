@@ -110,6 +110,7 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
 
   // --- state ----------------------------------------------------------------
   const book = new ColoringBook(canvas, stage);
+  book.onSound = (event) => sound.play(event);
   let settings: Settings;
   let tool: KidTool = "fill";
   let color = PALETTE[1].hex;

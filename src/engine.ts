@@ -80,6 +80,8 @@ export class ColoringBook {
   onHistory: (() => void) | null = null;
   /** Fired after a fill or a finished stroke, with the picture progress. */
   onPaint: ((progress: PaintProgress) => void) | null = null;
+  /** UI-only. A finished fill, or a dab that is not the eraser. */
+  onSound: ((event: "fill" | "stroke") => void) | null = null;
 
   constructor(
     private view: HTMLCanvasElement,
@@ -332,6 +334,14 @@ export class ColoringBook {
     this.onPaint(this.progress());
   }
 
+  private cue(event: "fill" | "stroke"): void {
+    try {
+      this.onSound?.(event);
+    } catch {
+      /* Sound never blocks painting. */
+    }
+  }
+
   private pushUndo(): void {
     this.redoStack.length = 0;
     this.undoStack.push(this.paint.ctx.getImageData(0, 0, this.w, this.h));
@@ -476,6 +486,7 @@ export class ColoringBook {
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
     this.hasDab = true;
+    if (this.tool !== "eraser") this.cue("stroke");
   }
 
   private strokeTo(x: number, y: number): void {
@@ -513,6 +524,7 @@ export class ColoringBook {
     this.paint.ctx.putImageData(image, 0, 0);
     this.render();
     this.emitPaint();
+    this.cue("fill");
   }
 
   private finishStroke(): void {
