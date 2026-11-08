@@ -85,15 +85,21 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
   const stage = el("div", { class: "paint__stage" }, [canvas]);
   const loading = el("p", { class: "paint__loading", text: "Открываем картинку…" });
 
+  const magnetLabel = el("span", { class: "magnet__label", text: "В линиях" });
   const magnetBtn = el(
     "button",
-    { class: "magnet", attrs: { type: "button", "aria-pressed": "true", "aria-label": "Не выходить за линии" } },
-    [icon("magnet", 26)],
+    {
+      class: "magnet is-on",
+      attrs: { type: "button", "aria-pressed": "true", "aria-label": "Краска не выходит за линии" },
+    },
+    [icon("magnet", 26), magnetLabel],
   );
 
-  const toolsRow = el("div", { class: "tools" });
+  const toolsRow = el("div", { class: "tools", attrs: { role: "group", "aria-label": "Инструменты" } });
   const paletteRow = el("div", { class: "palette", attrs: { role: "listbox", "aria-label": "Цвета" } });
   const hint = el("p", { class: "paint__hint", text: TOOL_HINTS.fill });
+  const toast = el("p", { class: "toast", attrs: { role: "status", hidden: true } });
+  const frame = el("div", { class: "paint__frame" }, [stage, loading, toast]);
 
   const paint = el("div", { class: "paint" }, [
     topbar({
@@ -103,15 +109,21 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
       trailing: [undoBtn, redoBtn, doneBtn],
       class: "topbar--paint",
     }),
-    el("div", { class: "paint__canvas" }, [magnetBtn, stage, loading]),
-    el("div", { class: "dock" }, [toolsRow, paletteRow, hint]),
+    el("div", { class: "paint__canvas" }, [magnetBtn, frame]),
+    el("div", { class: "dock" }, [
+      el("p", { class: "dock__cap", text: "Инструменты" }),
+      toolsRow,
+      el("p", { class: "dock__cap", text: "Цвета" }),
+      paletteRow,
+      hint,
+    ]),
   ]);
   root.append(paint);
 
   // --- state ----------------------------------------------------------------
   const book = new ColoringBook(canvas, stage);
   book.onSound = (event) => sound.play(event);
-  let settings: Settings;
+  let settings: Settings | undefined;
   let tool: KidTool = "fill";
   let color = PALETTE[1].hex;
   let sizes: Record<"brush" | "eraser", number> = { brush: 16, eraser: 26 };
@@ -121,26 +133,34 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
   let sessionDrawingId: string | null = null;
   let sizePopover: HTMLElement | null = null;
 
+  let toastTimer = 0;
+  const showToast = (text: string): void => {
+    toast.hidden = false;
+    toast.textContent = text;
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => {
+      toast.hidden = true;
+    }, 1800);
+  };
+
   const setMagnet = (on: boolean): void => {
     book.setClip(on);
     magnetBtn.classList.toggle("is-on", on);
     magnetBtn.setAttribute("aria-pressed", String(on));
-    const iconName = on ? "magnet" : "magnetOff";
-    magnetBtn.replaceChildren(icon(iconName, 26));
-    if (settings.magnetLocked) {
-      const badge = el("span", { class: "magnet__lock" }, [icon("lock", 14)]);
-      magnetBtn.append(badge);
+    magnetBtn.setAttribute(
+      "aria-label",
+      on ? "Краска не выходит за линии" : "Можно рисовать поверх линий",
+    );
+    magnetLabel.textContent = on ? "В линиях" : "Свободно";
+    magnetBtn.replaceChildren(icon(on ? "magnet" : "magnetOff", 26), magnetLabel);
+    if (settings?.magnetLocked) {
+      magnetBtn.append(el("span", { class: "magnet__lock" }, [icon("lock", 14)]));
     }
   };
 
   const syncHistory = (): void => {
     undoBtn.disabled = !book.canUndo;
     redoBtn.disabled = !book.canRedo;
-  };
-
-  const paintDot = (): void => {
-    const bucket = toolsRow.querySelector<HTMLButtonElement>('[data-tool="fill"] .tool__drop');
-    if (bucket) bucket.style.background = color;
   };
 
   const closeSizePopover = (): void => {
@@ -221,14 +241,7 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
           on: { click: () => selectTool(item.kind) },
         },
         [
-          item.kind === "fill"
-            ? (() => {
-                const wrap = el("span", { class: "tool__bucket" }, [icon("bucket", 32)]);
-                const drop = el("span", { class: "tool__drop", style: { background: color } });
-                wrap.append(drop);
-                return wrap;
-              })()
-            : icon(item.kind === "brush" ? "brush" : "eraser", 32),
+          icon(item.kind === "fill" ? "bucket" : item.kind === "brush" ? "brush" : "eraser", 32),
           el("span", { class: "tool__label", text: item.label }),
         ],
       );
@@ -240,6 +253,7 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
         label: "Очистить",
         icon: icon("clear", 32),
         duration: 1200,
+        onShort: () => showToast("Удерживай, чтобы очистить"),
         onHold: () => {
           if (!book.hasPaint()) {
             hint.textContent = "Пока нечего стирать";
@@ -255,7 +269,6 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
         },
       }),
     );
-    paintDot();
     if (sizePopover) {
       const active = toolsRow.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`);
       active?.classList.add("has-popover");
@@ -276,12 +289,12 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
               color = entry.hex;
               book.setColor(color);
               sound.play("tap");
+              hint.textContent = entry.name;
               paletteRow.querySelectorAll<HTMLElement>(".swatch").forEach((node) => {
                 const active = node.dataset.color === color;
                 node.classList.toggle("is-active", active);
                 node.setAttribute("aria-selected", String(active));
               });
-              paintDot();
             },
           },
         }),
@@ -369,9 +382,10 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
   doneBtn.addEventListener("click", () => void finish());
 
   magnetBtn.addEventListener("click", () => {
-    if (settings.magnetLocked) {
+    if (settings?.magnetLocked) {
       sound.play("miss");
       hint.textContent = "Магнит заперт взрослым";
+      showToast("Взрослый включил «в линиях»");
       return;
     }
     const next = !magnetBtn.classList.contains("is-on");
@@ -379,6 +393,7 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
     void store.saveSettings({ magnet: next });
     sound.play("magnet");
     platform.haptics("light");
+    hint.textContent = next ? "Краска не выходит за линии" : "Можно рисовать поверх линий";
   });
 
   const canvasBox = paint.querySelector<HTMLElement>(".paint__canvas")!;
@@ -438,6 +453,7 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
     document.removeEventListener("visibilitychange", onVisibility);
     window.removeEventListener("keydown", onKey);
     window.clearInterval(autosaveTimer);
+    window.clearTimeout(toastTimer);
     autosave();
     disposed = true;
   };

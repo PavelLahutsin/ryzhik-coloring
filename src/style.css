@@ -49,6 +49,11 @@
   box-sizing: border-box;
 }
 
+button,
+input {
+  touch-action: manipulation;
+}
+
 html,
 body {
   margin: 0;
@@ -330,11 +335,15 @@ p {
 
 .chip {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 2px;
   min-height: 104px;
+  padding: 8px;
+  font-family: var(--font-ui);
   color: var(--ink);
+  cursor: pointer;
   background: var(--yellow-tint);
   border: 1px solid var(--yellow);
   border-radius: var(--radius-lg);
@@ -347,12 +356,41 @@ p {
 .chip__value {
   font-size: 1.5rem;
   font-weight: 800;
+  line-height: 1;
 }
 
-.menu__say {
+.chip__note {
+  max-width: 140px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
   color: var(--ink-soft);
-  font-size: 1.1rem;
-  font-weight: 700;
+}
+
+.menu__go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 12px 18px;
+  font-family: var(--font-ui);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--ink);
+  cursor: pointer;
+  background: var(--surface);
+  border: 2px solid var(--orange);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+}
+
+.menu__go:active {
+  transform: scale(0.98);
+}
+
+.menu__go-label {
   text-align: center;
 }
 
@@ -401,8 +439,9 @@ p {
 
 .card__title {
   font-family: var(--font-ui);
-  font-size: 1.15rem;
+  font-size: 1rem;
   font-weight: 800;
+  line-height: 1.15;
   color: var(--ink);
 }
 
@@ -555,11 +594,19 @@ p {
   flex: 1;
   min-height: 0;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 4px;
+  flex-direction: column;
   background: transparent;
   overflow: hidden;
+}
+
+.paint__frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .paint__stage {
@@ -590,13 +637,16 @@ p {
 
 .magnet {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 4px;
+  right: 4px;
   z-index: 3;
-  display: grid;
-  place-items: center;
-  width: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 14px 0 12px;
   color: var(--ink-soft);
   cursor: pointer;
   background: var(--surface);
@@ -604,6 +654,12 @@ p {
   border-radius: 999px;
   box-shadow: var(--shadow-soft);
   transition: background var(--fast) linear, color var(--fast) linear;
+}
+
+.magnet__label {
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .magnet.is-on {
@@ -627,7 +683,7 @@ p {
 
 .dock {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   /* On a tablet the four tools would stretch to 196dp each. The document
      caps the paint chrome at a comfortable thumb span instead. */
   width: 100%;
@@ -643,15 +699,24 @@ p {
   gap: var(--gap);
 }
 
+.dock__cap {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .tool {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-height: clamp(72px, 22vw, 88px);
-  padding: 6px;
+  gap: 2px;
+  min-height: var(--tap);
+  padding: 4px 2px;
   color: var(--ink);
   cursor: pointer;
   background: var(--surface);
@@ -672,6 +737,7 @@ p {
 .tool__label {
   font-size: 0.78rem;
   font-weight: 800;
+  line-height: 1.1;
 }
 
 .tool__bucket {
@@ -708,14 +774,14 @@ p {
 
 .hold__track {
   fill: none;
-  stroke: transparent;
-  stroke-width: 3;
+  stroke: var(--line);
+  stroke-width: 4;
 }
 
 .hold__value {
   fill: none;
   stroke: var(--orange-deep);
-  stroke-width: 3;
+  stroke-width: 4;
   stroke-linecap: round;
   transition: stroke-dashoffset 80ms linear;
 }
@@ -765,9 +831,9 @@ p {
 .palette {
   display: flex;
   flex: none;
-  gap: 10px;
-  min-height: 80px;
-  padding: 6px 4px;
+  gap: 8px;
+  min-height: 68px;
+  padding: 2px 4px;
   overflow-x: auto;
   overflow-y: hidden;
   scroll-snap-type: x proximity;
@@ -804,9 +870,34 @@ p {
 .paint__hint {
   padding: 0 4px;
   color: var(--ink-soft);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 700;
+  line-height: 1.2;
   text-align: center;
+}
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  z-index: 5;
+  max-width: calc(100% - 24px);
+  margin: 0;
+  padding: 10px 14px;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-align: center;
+  pointer-events: none;
+  background: var(--surface);
+  border: 2px solid var(--orange);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  transform: translateX(-50%);
+}
+
+.toast[hidden] {
+  display: none;
 }
 
 /* --- S5 reward ----------------------------------------------------------- */
@@ -1077,6 +1168,26 @@ p {
   font-weight: 800;
 }
 
+.gate__answer {
+  width: min(100%, 280px);
+  height: var(--tap);
+  font-family: var(--font-ui);
+  font-size: 2rem;
+  font-weight: 800;
+  text-align: center;
+  color: var(--ink);
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-md);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.gate__answer:focus {
+  border-color: var(--emerald);
+  outline: none;
+}
+
 .gate__keypad {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1087,7 +1198,8 @@ p {
 .gate__key {
   display: grid;
   place-items: center;
-  min-height: 72px;
+  min-width: var(--tap);
+  min-height: var(--tap);
   color: var(--ink);
   cursor: pointer;
   background: var(--surface);
@@ -1290,6 +1402,25 @@ p {
   }
 }
 
+@media (orientation: portrait) and (max-width: 700px) {
+  .paint {
+    gap: 4px;
+    padding: 4px;
+    padding-bottom: calc(4px + env(safe-area-inset-bottom));
+  }
+
+  .dock {
+    gap: 4px;
+  }
+}
+
+/* Room above the sheet for the «В линиях» label, so it does not cover the drawing. */
+@media (orientation: portrait) {
+  .paint__canvas {
+    padding-top: 68px;
+  }
+}
+
 @media (orientation: landscape) and (max-height: 560px) {
   .paint {
     gap: 6px;
@@ -1328,8 +1459,13 @@ p {
     height: 72px;
   }
 
-  .paint__hint {
+  .paint__hint,
+  .dock__cap {
     display: none;
+  }
+
+  .paint__canvas {
+    padding-top: 0;
   }
 
   .sizes {

@@ -52,12 +52,12 @@ await shot("390-2-albums", phone, (p) => p.getByRole("button", { name: "Раск
 await shot("390-3-pictures", phone, async (p) => {
   await p.getByRole("button", { name: "Раскраски" }).click();
   await p.waitForTimeout(300);
-  await p.getByRole("button", { name: "Друзья" }).click();
+  await p.getByRole("button", { name: "Рыжик и его друзья" }).click();
 });
 await shot("390-4-coloring", phone, async (p) => {
   await p.getByRole("button", { name: "Раскраски" }).click();
   await p.waitForTimeout(300);
-  await p.getByRole("button", { name: "Друзья" }).click();
+  await p.getByRole("button", { name: "Рыжик и его друзья" }).click();
   await p.waitForTimeout(300);
   await p.getByRole("button", { name: /Мишка/ }).first().click();
   await p.waitForSelector(".sheet");
@@ -68,7 +68,7 @@ await shot("390-4-coloring", phone, async (p) => {
 await shot("390-5-painted", phone, async (p) => {
   await p.getByRole("button", { name: "Раскраски" }).click();
   await p.waitForTimeout(300);
-  await p.getByRole("button", { name: "Друзья" }).click();
+  await p.getByRole("button", { name: "Рыжик и его друзья" }).click();
   await p.waitForTimeout(300);
   await p.getByRole("button", { name: /Мишка/ }).first().click();
   await p.waitForSelector(".sheet");
@@ -78,7 +78,7 @@ await shot("390-5-painted", phone, async (p) => {
 await shot("390-6-reward", phone, async (p) => {
   await p.getByRole("button", { name: "Раскраски" }).click();
   await p.waitForTimeout(300);
-  await p.getByRole("button", { name: "Друзья" }).click();
+  await p.getByRole("button", { name: "Рыжик и его друзья" }).click();
   await p.waitForTimeout(300);
   await p.getByRole("button", { name: /Мишка/ }).first().click();
   await p.waitForSelector(".sheet");
@@ -90,7 +90,7 @@ await shot("390-6-reward", phone, async (p) => {
 await shot("390-7-gallery", phone, async (p) => {
   await p.getByRole("button", { name: "Раскраски" }).click();
   await p.waitForTimeout(300);
-  await p.getByRole("button", { name: "Друзья" }).click();
+  await p.getByRole("button", { name: "Рыжик и его друзья" }).click();
   await p.waitForTimeout(300);
   await p.getByRole("button", { name: /Мишка/ }).first().click();
   await p.waitForSelector(".sheet");
@@ -123,7 +123,7 @@ await shot("360-1-menu", [360, 640], async () => {});
 await shot("360-4-coloring", [360, 640], async (p) => {
   await p.getByRole("button", { name: "Раскраски" }).click();
   await p.waitForTimeout(300);
-  await p.getByRole("button", { name: "Друзья" }).click();
+  await p.getByRole("button", { name: "Рыжик и его друзья" }).click();
   await p.waitForTimeout(300);
   await p.getByRole("button", { name: /Мишка/ }).first().click();
   await p.waitForSelector(".sheet");
@@ -132,7 +132,7 @@ await shot("360-4-coloring", [360, 640], async (p) => {
 await shot("834-4-coloring", [834, 1112], async (p) => {
   await p.getByRole("button", { name: "Раскраски" }).click();
   await p.waitForTimeout(300);
-  await p.getByRole("button", { name: "Друзья" }).click();
+  await p.getByRole("button", { name: "Рыжик и его друзья" }).click();
   await p.waitForTimeout(300);
   await p.getByRole("button", { name: /Мишка/ }).first().click();
   await p.waitForSelector(".sheet");
@@ -141,7 +141,7 @@ await shot("834-4-coloring", [834, 1112], async (p) => {
 await shot("834-6-reward", [834, 1112], async (p) => {
   await p.getByRole("button", { name: "Раскраски" }).click();
   await p.waitForTimeout(300);
-  await p.getByRole("button", { name: "Друзья" }).click();
+  await p.getByRole("button", { name: "Рыжик и его друзья" }).click();
   await p.waitForTimeout(300);
   await p.getByRole("button", { name: /Мишка/ }).first().click();
   await p.waitForSelector(".sheet");

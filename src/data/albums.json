@@ -3,7 +3,7 @@
   "albums": [
     {
       "id": "friends",
-      "title": "Друзья",
+      "title": "Рыжик и его друзья",
       "emoji": "",
       "cover": "shot11",
       "available": true,
@@ -16,7 +16,7 @@
     },
     {
       "id": "family",
-      "title": "Семья",
+      "title": "Рыжик и его семья",
       "emoji": "",
       "cover": null,
       "available": false,
@@ -24,7 +24,7 @@
     },
     {
       "id": "songs",
-      "title": "Песенки",
+      "title": "Рыжик и его песенки",
       "emoji": "",
       "cover": null,
       "available": false,

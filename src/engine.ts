@@ -95,7 +95,8 @@ export class ColoringBook {
     view.addEventListener("pointerup", this.onPointerUp);
     view.addEventListener("pointercancel", this.onPointerUp);
     view.addEventListener("contextmenu", (event) => event.preventDefault());
-    new ResizeObserver(() => this.layout()).observe(stage);
+    const box = stage.parentElement ?? stage;
+    new ResizeObserver(() => this.layout()).observe(box);
   }
 
   get canUndo(): boolean {
