@@ -11,6 +11,10 @@
         {
           "id": "shot11",
           "title": "Рыжик и Мишка"
+        },
+        {
+          "id": "ryzhik_samoletik",
+          "title": "Рыжик и самолётик"
         }
       ]
     },
@@ -18,9 +22,14 @@
       "id": "family",
       "title": "Рыжик и его семья",
       "emoji": "",
-      "cover": null,
-      "available": false,
-      "pictures": []
+      "cover": "druzhnaya_semya",
+      "available": true,
+      "pictures": [
+        {
+          "id": "druzhnaya_semya",
+          "title": "Дружная семья"
+        }
+      ]
     },
     {
       "id": "songs",
