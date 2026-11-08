@@ -16,7 +16,8 @@
   },
   "dependencies": {
     "@fontsource/comfortaa": "^5.2.8",
-    "@fontsource/nunito": "^5.2.7"
+    "@fontsource/nunito": "^5.2.7",
+    "@vkontakte/vk-bridge": "^3.0.2"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",

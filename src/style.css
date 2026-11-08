@@ -69,8 +69,11 @@ body {
 #app {
   min-height: 100%;
   min-height: 100dvh;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
-    env(safe-area-inset-left);
+  /* VK sets the variables. Unset, they are 0, so a browser still uses env() only. */
+  padding-top: max(env(safe-area-inset-top), var(--vk-safe-area-inset-top, 0px));
+  padding-right: max(env(safe-area-inset-right), var(--vk-safe-area-inset-right, 0px));
+  padding-bottom: max(env(safe-area-inset-bottom), var(--vk-safe-area-inset-bottom, 0px));
+  padding-left: max(env(safe-area-inset-left), var(--vk-safe-area-inset-left, 0px));
 }
 
 img {
