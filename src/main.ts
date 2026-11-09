@@ -47,10 +47,10 @@ function render(route: Route): void {
       cleanup = renderAlbum(root!, route.albumId);
       break;
     case "picture":
-      cleanup = mountPicture(root!, route.pictureId);
+      cleanup = mountPicture(root!, route.pictureId, route.drawingId);
       break;
     case "reward":
-      cleanup = renderReward(root!, route.pictureId);
+      cleanup = renderReward(root!, route.pictureId, route.drawingId, route.newStar === true);
       break;
     case "drawings":
       cleanup = renderDrawings(root!);

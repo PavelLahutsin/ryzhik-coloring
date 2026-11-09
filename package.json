@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "regions": "node --experimental-strip-types scripts/regions.ts",
+    "regions": "node scripts/run-regions.mjs",
     "smoke": "node scripts/smoke.mjs",
     "shots": "node scripts/shots.mjs"
   },

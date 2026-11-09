@@ -7,8 +7,8 @@ export type Route =
   | { name: "menu" }
   | { name: "albums" }
   | { name: "album"; albumId: string }
-  | { name: "picture"; pictureId: string }
-  | { name: "reward"; pictureId: string }
+  | { name: "picture"; pictureId: string; drawingId?: string }
+  | { name: "reward"; pictureId: string; drawingId?: string; newStar?: boolean }
   | { name: "drawings" }
   | { name: "sound" }
   | { name: "gate"; next: string }
@@ -36,9 +36,13 @@ export function parseRoute(hash: string): Route {
     case "album":
       return rest[0] ? { name: "album", albumId: rest[0] } : { name: "albums" };
     case "picture":
-      return rest[0] ? { name: "picture", pictureId: rest[0] } : { name: "albums" };
+      return rest[0]
+        ? { name: "picture", pictureId: rest[0], drawingId: rest[1] || undefined }
+        : { name: "albums" };
     case "reward":
-      return rest[0] ? { name: "reward", pictureId: rest[0] } : { name: "menu" };
+      return rest[0]
+        ? { name: "reward", pictureId: rest[0], drawingId: rest[1] || undefined, newStar: rest[2] === "star" }
+        : { name: "menu" };
     case "drawings":
       return { name: "drawings" };
     case "sound":

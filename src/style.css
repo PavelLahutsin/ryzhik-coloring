@@ -1030,6 +1030,7 @@ p {
   width: min(560px, 100%);
   max-height: 92dvh;
   padding: 12px;
+  overflow-y: auto;
   background: var(--surface);
   border-radius: var(--radius-lg);
 }
@@ -1539,5 +1540,175 @@ p {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* --- patch: 8 colours + "ещё", zoom reset, hidden fix --------------------- */
+
+/* display:flex/grid on a class beats the hidden attribute; hidden must always win. */
+[hidden] {
+  display: none !important;
+}
+
+.dock__cap {
+  display: none;
+}
+
+.paint {
+  position: relative;
+}
+
+.paint__canvas {
+  touch-action: none;
+}
+
+/* Pinch and drag are read on the frame around the sheet. */
+.paint__frame {
+  overflow: hidden;
+  touch-action: none;
+}
+
+.zoomreset {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  color: var(--ink);
+  cursor: pointer;
+  background: var(--yellow-tint);
+  border: 2px solid var(--yellow);
+  border-radius: 999px;
+  box-shadow: var(--shadow-soft);
+}
+
+.zoomreset:active {
+  transform: scale(0.95);
+}
+
+.tools--single {
+  grid-auto-columns: minmax(0, 200px);
+  justify-content: center;
+}
+
+/* Eight colours and "ещё": 5 + 4 on a phone, one row where there is room. */
+.palette {
+  display: grid;
+  grid-template-columns: repeat(5, var(--tap));
+  gap: 8px 6px;
+  justify-content: center;
+  height: auto;
+  min-height: 0;
+  padding: 4px 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: none;
+}
+
+.swatch {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  min-width: var(--tap);
+  height: var(--tap);
+  aspect-ratio: auto;
+  scroll-snap-align: none;
+}
+
+.swatch__check {
+  display: none;
+  pointer-events: none;
+}
+
+.swatch.is-active {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 5px var(--ink);
+  transform: scale(1.05);
+}
+
+.swatch.is-active .swatch__check {
+  display: grid;
+}
+
+.swatch--more {
+  background: conic-gradient(#ff4b4b, #ffc94a, #3cbf4a, #3ec6c6, #4c8dff, #a878ff, #ff7eb6, #ff4b4b);
+}
+
+.more__core {
+  position: absolute;
+  inset: 6px;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 800;
+  background: #fff;
+  border-radius: 999px;
+}
+
+.more {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 6px;
+  background: rgba(51, 41, 31, 0.55);
+}
+
+.more__panel {
+  display: grid;
+  gap: 10px;
+  width: min(560px, 100%);
+  max-height: 100%;
+  padding: 12px;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.more__close {
+  justify-self: end;
+}
+
+.more__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tap), 1fr));
+  gap: 10px;
+  justify-items: center;
+}
+
+@media (min-width: 720px) {
+  .dock {
+    max-width: 640px;
+  }
+
+  .palette {
+    grid-template-columns: repeat(9, var(--tap));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .dock {
+    max-width: none;
+  }
+
+  .palette {
+    grid-template-columns: repeat(9, var(--tap));
+    gap: 4px;
+    height: auto;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .more {
+    align-items: center;
   }
 }

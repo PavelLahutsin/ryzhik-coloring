@@ -1,4 +1,4 @@
-import { catalog, type AlbumEntry } from "../data/albums";
+import { shippedAlbums, type AlbumEntry } from "../data/albums";
 import { navigate } from "../router";
 import { sound } from "../sound";
 import { store } from "../storage";
@@ -57,7 +57,7 @@ export function renderAlbums(root: HTMLElement): () => void {
   void (async () => {
     const progress = await store.progress();
     const rendered: HTMLElement[] = [];
-    for (const album of catalog.albums) {
+    for (const album of shippedAlbums()) {
       const done = album.pictures.filter(
         (picture) => progress.pictures[picture.id]?.status === "done",
       ).length;

@@ -75,6 +75,15 @@ export function renderDrawings(root: HTMLElement): () => void {
             {
               class: "btn btn--primary",
               attrs: { type: "button" },
+              on: { click: () => navigate(`/picture/${drawing.pictureId}/${drawing.id}`) },
+            },
+            [icon("brush", 22), el("span", { class: "btn__label", text: "Дорисовать" })],
+          ),
+          el(
+            "button",
+            {
+              class: "btn btn--primary",
+              attrs: { type: "button" },
               on: {
                 click: async () => {
                   await platform.saveImage(drawing.image, `${drawing.pictureId}.png`);

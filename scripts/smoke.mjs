@@ -28,8 +28,8 @@ const SIZES = [
 
 /** Минимальный размер нажимаемого элемента в детской зоне, по дизайн-документу. */
 const MIN_TAP = 64;
-/** Порог, после которого «Готово» ведёт на награду. */
-const DONE_RATIO = 0.85;
+/** Доля закрашенных областей после сетки тапов: сколько реально закрасилось. */
+const MIN_PAINTED_RATIO = 0.3;
 
 const failures = [];
 
@@ -83,7 +83,13 @@ for (const size of SIZES) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check(!overflow, `${size.name}: горизонтальное переполнение на экране раскраски`);
 
-  // Закрашиваем сеткой точек, пока не наберётся порог награды.
+  // «Готово» обязана быть доступна с первой секунды, на чистом листе.
+  check(
+    await page.getByRole("button", { name: "Готово" }).isEnabled(),
+    `${size.name}: «Готово» заблокирована на чистом листе`,
+  );
+
+  // Закрашиваем сеткой точек: проверяем, что заливка вообще работает.
   const sheet = await page.locator(".sheet").boundingBox();
   check(Boolean(sheet), `${size.name}: холст не отрисован`);
   for (let row = 0; sheet && row < 10; row++) {
@@ -94,15 +100,31 @@ for (const size of SIZES) {
       );
     }
   }
-  await page.waitForTimeout(400);
   await page.screenshot({ path: `${OUT}/${size.name}-3-painted.png` });
+
+  // Автосохранение отложенное (полсекунды после последнего действия), поэтому
+  // ждём саму запись, а не фиксированную паузу.
+  await page
+    .waitForFunction(
+      () => {
+        const raw = localStorage.getItem("ryzhik:progress");
+        const ratio = raw ? JSON.parse(raw)?.pictures?.shot11?.ratio : 0;
+        return (ratio ?? 0) > 0;
+      },
+      null,
+      { timeout: 5000 },
+    )
+    .catch(() => undefined);
 
   const ratio = await page.evaluate(async () => {
     const stored = localStorage.getItem("ryzhik:progress");
     const progress = stored ? JSON.parse(stored) : null;
     return progress?.pictures?.shot11?.ratio ?? 0;
   });
-  check(ratio >= DONE_RATIO, `${size.name}: закрашено ${Math.round(ratio * 100)}%, мало для награды`);
+  check(
+    ratio >= MIN_PAINTED_RATIO,
+    `${size.name}: заливка по тапам не сработала — закрашено ${Math.round(ratio * 100)}%`,
+  );
 
   await page.getByRole("button", { name: "Готово" }).click();
   await page.waitForTimeout(1200);
