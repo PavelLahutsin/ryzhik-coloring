@@ -52,11 +52,13 @@ export function renderReward(
     ]),
   ]);
   root.append(view);
-  sound.play("star");
+  sound.play("done");
+  sound.praise();
 
   void (async () => {
     const [progress, drawings] = await Promise.all([store.progress(), store.drawings()]);
     starsValue.textContent = String(progress.stars);
+    if (newStar && progress.stars > 0 && progress.stars % 5 === 0) sound.play("sticker");
     // "-" is "Готово" on a clean sheet: nothing was saved, so no thumbnail of an
     // older drawing. No id at all is a link from before drawing ids existed.
     const drawing = drawingId

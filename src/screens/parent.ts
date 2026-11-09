@@ -1,5 +1,6 @@
 import { catalog } from "../data/albums";
 import { navigate } from "../router";
+import { sound } from "../sound";
 import { BRUSH_SIZES, store, type Settings } from "../storage";
 import { el } from "../ui/dom";
 import { icon } from "../ui/icons";
@@ -80,6 +81,12 @@ export function renderParent(root: HTMLElement): () => void {
       el("div", { class: "adult__actions" }, [holdReset()]),
     );
 
+    const audio = section("Звук");
+    audio.append(
+      row("Звуки", toggle(settings.sounds, (next) => void patch({ sounds: next }))),
+      row("Голос Рыжика", toggle(settings.voice, (next) => void patch({ voice: next }))),
+    );
+
     const privacy = section("Приватность");
     privacy.append(
       row("Анонимная статистика", toggle(settings.analytics, (next) => void patch({ analytics: next }))),
@@ -98,7 +105,7 @@ export function renderParent(root: HTMLElement): () => void {
     const about = section("О приложении");
     about.append(row("Версия", "1.0.0 MVP"), row("Платформа", "веб / VK Mini App (каркас)"));
 
-    body.replaceChildren(drawing, progress, privacy, about);
+    body.replaceChildren(drawing, audio, progress, privacy, about);
   };
 
   /** Hold 2 s, then a second confirming tap: two different deliberate actions. */
@@ -144,7 +151,9 @@ export function renderParent(root: HTMLElement): () => void {
   };
 
   const patch = async (changes: Partial<Settings>): Promise<void> => {
-    await store.saveSettings(changes);
+    const next = await store.saveSettings(changes);
+    sound.configure(next);
+    if (changes.sounds === false || changes.voice === false) sound.stop();
     await refresh();
   };
 

@@ -161,7 +161,8 @@ export function buildLineMask(alpha: Uint8Array, w: number, h: number, options: 
   if (!Number.isInteger(threshold) || threshold < 1 || threshold > 255 || ![0, 1, 2].includes(radius)) {
     throw new Error("Invalid region mask options");
   }
-  const wall = Uint8Array.from(alpha, value => value >= threshold ? 1 : 0);
+  const wall = new Uint8Array(alpha.length);
+  for (let i = 0; i < alpha.length; i++) wall[i] = alpha[i] >= threshold ? 1 : 0;
   if (!radius) return wall;
   const closed = closeGaps(wall, w, h, radius);
   const original = labelRegions(wall, w, h);
@@ -169,12 +170,25 @@ export function buildLineMask(alpha: Uint8Array, w: number, h: number, options: 
   for (let i = 0; i < original.length; i++) if (!closed[i]) surviving.add(original[i]);
   // Closing may consume a tiny highlight completely. Restore its white pixels,
   // but not a verified 1..3px connection between two separate lobes.
-  const vanished = Uint32Array.from(original, id => id && !surviving.has(id) ? id : 0);
+  const vanished = new Uint32Array(original.length);
+  let vanishedCount = 0;
+  for (let i = 0; i < original.length; i++) {
+    const id = original[i];
+    if (id && !surviving.has(id)) {
+      vanished[i] = id;
+      vanishedCount++;
+    }
+  }
+  if (!vanishedCount) return closed;
   const narrow = narrowRuns(vanished, w, h);
   const neckIds = new Set(auditRegionLabels(vanished, w, h).suspectedLeaks.map(leak => leak.id));
   // Reconstruct each lobe into its thin tips. Only competing wave fronts
   // remain closed; deleting every narrow pixel would erase a thin mouth.
-  const seeds = labelRegions(Uint8Array.from(vanished, (id, i) => !id || (neckIds.has(id) && narrow[i]) ? 1 : 0), w, h);
+  const seedBarrier = new Uint8Array(vanished.length);
+  for (let i = 0; i < vanished.length; i++) {
+    seedBarrier[i] = !vanished[i] || (neckIds.has(vanished[i]) && narrow[i]) ? 1 : 0;
+  }
+  const seeds = labelRegions(seedBarrier, w, h);
   const queue = new Int32Array(seeds.length);
   let head = 0, tail = 0;
   for (let i = 0; i < seeds.length; i++) if (seeds[i]) queue[tail++] = i;
@@ -278,7 +292,8 @@ export function auditRegionLabels(labels: Uint32Array, w: number, h: number): Re
     s.n++; s.sx += i % w; s.sy += Math.floor(i / w);
   }
   const narrow = narrowRuns(labels, w, h);
-  const barrier = Uint8Array.from(labels, (id, i) => !id || narrow[i] ? 1 : 0);
+  const barrier = new Uint8Array(labels.length);
+  for (let i = 0; i < labels.length; i++) barrier[i] = !labels[i] || narrow[i] ? 1 : 0;
   const cores = labelRegions(barrier, w, h);
   const parts = new Map<number, Set<number>>();
   for (let i = 0; i < labels.length; i++) if (cores[i]) {

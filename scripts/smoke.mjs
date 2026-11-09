@@ -18,7 +18,7 @@
 import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
 import { register } from "node:module";
-register(new URL("./ts-loader.mjs", import.meta.url), import.meta.url);
+await register(new URL("./ts-loader.mjs", import.meta.url).href, import.meta.url);
 await import("./regions.test.ts");
 
 async function airplaneIsolation(page, size) {

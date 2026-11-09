@@ -150,7 +150,10 @@ export function mountPicture(
 
   // --- state ----------------------------------------------------------------
   const book = new ColoringBook(canvas, stage);
-  book.onSound = (event) => sound.play(event);
+  book.onSound = (event) => {
+    sound.play(event);
+    if (event === "fill") sound.noteFill();
+  };
   let settings: Settings | undefined;
   let tool: KidTool = "fill";
   let color = MAIN_COLORS[1].hex;
@@ -320,7 +323,8 @@ export function mountPicture(
   const pickColor = (entry: ColorEntry): void => {
     color = entry.hex;
     book.setColor(color);
-    sound.play("tap");
+    sound.noteColor();
+    sound.play("color");
     hint.textContent = entry.name;
     closeMore();
     renderPalette();
@@ -492,6 +496,7 @@ export function mountPicture(
   };
 
   const leave = (path: string): void => {
+    if (path === "/menu") sound.goodbye();
     void persist(true);
     navigate(path);
   };
@@ -542,7 +547,6 @@ export function mountPicture(
         }
       }
       platform.haptics("success");
-      sound.play("done");
       disposed = true;
       navigate(`/reward/${pictureId}/${savedId}${newStar ? "/star" : ""}`);
     } finally {
@@ -565,6 +569,7 @@ export function mountPicture(
   undoBtn.addEventListener("click", () => {
     book.undo();
     sound.play("undo");
+    sound.noteUndo();
   });
   redoBtn.addEventListener("click", () => {
     book.redo();
@@ -573,8 +578,8 @@ export function mountPicture(
   doneBtn.addEventListener("click", () => void finish());
 
   magnetBtn.addEventListener("click", () => {
-    if (settings?.magnetLocked) {
-      sound.play("miss");
+      if (settings?.magnetLocked) {
+      sound.play("locked");
       hint.textContent = "Магнит заперт взрослым";
       showToast("Взрослый включил «в линиях»");
       return;
@@ -651,6 +656,7 @@ export function mountPicture(
       }
       loaded = true;
       dirty = false;
+      sound.enterColoring(book.hasPaint());
       syncHistory();
       if (recovered) scheduleSave();
     } catch {
