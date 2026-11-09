@@ -5,6 +5,18 @@ import { el } from "../ui/dom";
 import { icon } from "../ui/icons";
 import { topbar } from "../ui/topbar";
 
+type ExportKind = "save" | "share";
+
+type PendingExport = { kind: ExportKind; image: string; filename: string; text: string };
+
+/** Held in memory only until the adult passes the gate. */
+let pendingExport: PendingExport | null = null;
+
+function stageExport(value: PendingExport): void {
+  pendingExport = value;
+  navigate(`/gate/${value.kind}`);
+}
+
 /**
  * S6 (basic). Newest first, no dates or captions: the child needs pictures,
  * the adult can open one and see everything else behind the gate.
@@ -85,9 +97,13 @@ export function renderDrawings(root: HTMLElement): () => void {
               class: "btn btn--primary",
               attrs: { type: "button" },
               on: {
-                click: async () => {
-                  await platform.saveImage(drawing.image, `${drawing.pictureId}.png`);
-                },
+                click: () =>
+                  stageExport({
+                    kind: "save",
+                    image: drawing.image,
+                    filename: `${drawing.pictureId}.png`,
+                    text: "Готовый рисунок Рыжика",
+                  }),
               },
             },
             [icon("check", 22), el("span", { class: "btn__label", text: "Сохранить" })],
@@ -98,8 +114,16 @@ export function renderDrawings(root: HTMLElement): () => void {
                 {
                   class: "btn btn--ghost",
                   attrs: { type: "button" },
-                  // Sharing is a child-exit action: always behind S8.
-                  on: { click: () => navigate(`/gate/share`) },
+                  // Saving and sharing both leave the app, so both sit behind S8.
+                  on: {
+                    click: () =>
+                      stageExport({
+                        kind: "share",
+                        image: drawing.image,
+                        filename: "ryzhik.png",
+                        text: "Раскраска с Рыжиком",
+                      }),
+                  },
                 },
                 [el("span", { class: "btn__label", text: "Поделиться" })],
               )
@@ -150,8 +174,61 @@ export function renderDrawings(root: HTMLElement): () => void {
     paintGrid();
   });
 
+  const onBack = (event: Event): void => {
+    if (overlay.hidden) return;
+    closeViewer();
+    event.preventDefault();
+  };
+  window.addEventListener("ryzhik:back", onBack);
+
   return () => {
     disposed = true;
+    window.removeEventListener("ryzhik:back", onBack);
     overlay.remove();
   };
+}
+
+/**
+ * Reached only after the parental gate. Runs the save or share that was
+ * staged on the gallery, then offers a way back to the pictures.
+ */
+export function renderExport(root: HTMLElement, kind: ExportKind): () => void {
+  const job = pendingExport && pendingExport.kind === kind ? pendingExport : null;
+  pendingExport = null;
+  const status = el("p", {
+    class: "empty-state__text",
+    text: job ? "Секунду…" : "Нечего сохранять",
+  });
+  const view = el("div", { class: "screen" }, [
+    topbar({
+      title: kind === "save" ? "Сохранить" : "Поделиться",
+      onBack: () => navigate("/drawings"),
+      onHome: () => navigate("/menu"),
+    }),
+    el("div", { class: "empty-state" }, [
+      status,
+      el(
+        "button",
+        {
+          class: "btn btn--primary",
+          attrs: { type: "button" },
+          on: { click: () => navigate("/drawings") },
+        },
+        [el("span", { class: "btn__label", text: "К рисункам" })],
+      ),
+    ]),
+  ]);
+  root.append(view);
+  if (job) {
+    const run = kind === "save" ? platform.saveImage(job.image, job.filename) : platform.share(job);
+    void run.then(
+      (ok) => {
+        status.textContent = ok ? "Готово" : "Не получилось. Попробуйте ещё раз.";
+      },
+      () => {
+        status.textContent = "Не получилось. Попробуйте ещё раз.";
+      },
+    );
+  }
+  return () => undefined;
 }

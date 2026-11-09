@@ -142,7 +142,8 @@ export function renderGate(root: HTMLElement, next: string): () => void {
       if (Number(input) === task.answer) {
         unlocked = true;
         writeState({ fails: 0, blockedUntil: 0 });
-        navigate(next);
+        // Replace the gate so Back does not land on the question again.
+        navigate(next.startsWith("/") ? next : `/${next}`, { replace: true });
         return;
       }
       input = "";

@@ -13,6 +13,8 @@ export type Route =
   | { name: "sound" }
   | { name: "gate"; next: string }
   | { name: "parent" }
+  | { name: "save" }
+  | { name: "share" }
   | { name: "missing" };
 
 const FALLBACK = "/";
@@ -51,6 +53,10 @@ export function parseRoute(hash: string): Route {
       return { name: "gate", next: rest[0] ?? "parent" };
     case "parent":
       return { name: "parent" };
+    case "save":
+      return { name: "save" };
+    case "share":
+      return { name: "share" };
     default:
       return { name: "missing" };
   }
@@ -61,9 +67,14 @@ export function href(path: string): string {
   return `#${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-export function navigate(path: string): void {
+export function navigate(path: string, options?: { replace?: boolean }): void {
   const next = href(path);
   if (window.location.hash === next) {
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    return;
+  }
+  if (options?.replace) {
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${next}`);
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     return;
   }

@@ -1,4 +1,4 @@
-import { capacitorAdapter } from "./capacitor";
+import { capacitorAdapter, initializeCapacitor } from "./capacitor";
 import type { PlatformAdapter } from "./types";
 import { activateVkAdapter, isVkLaunch, vkAdapter } from "./vk";
 import { webAdapter } from "./web";
@@ -27,7 +27,10 @@ function isCapacitorNative(): boolean {
  * VK Bridge is started only when `vk_*` launch parameters are present.
  */
 export function detectPlatform(): PlatformAdapter {
-  if (isCapacitorNative()) return capacitorAdapter;
+  if (isCapacitorNative()) {
+    initializeCapacitor();
+    return capacitorAdapter;
+  }
   if (isVkLaunch()) {
     activateVkAdapter();
     return vkAdapter;

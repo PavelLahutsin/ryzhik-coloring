@@ -606,6 +606,9 @@ export function mountPicture(
   };
   document.addEventListener("visibilitychange", onHide);
   window.addEventListener("pagehide", onPageHide);
+  // Android does not always fire visibilitychange when the app is backgrounded.
+  window.addEventListener("ryzhik:background", onPageHide);
+  window.addEventListener("ryzhik:leave", onPageHide);
 
   renderTools();
   renderPalette();
@@ -685,6 +688,8 @@ export function mountPicture(
   return () => {
     document.removeEventListener("visibilitychange", onHide);
     window.removeEventListener("pagehide", onPageHide);
+    window.removeEventListener("ryzhik:background", onPageHide);
+    window.removeEventListener("ryzhik:leave", onPageHide);
     window.removeEventListener("keydown", onKey);
     window.clearTimeout(toastTimer);
     closeMore();

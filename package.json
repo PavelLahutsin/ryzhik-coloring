@@ -12,14 +12,25 @@
     "preview": "vite preview",
     "regions": "node scripts/run-regions.mjs",
     "smoke": "node scripts/smoke.mjs",
-    "shots": "node scripts/shots.mjs"
+    "shots": "node scripts/shots.mjs",
+    "build:android": "tsc --noEmit && vite build --mode android",
+    "cap:sync": "npm run build:android && npx cap sync android",
+    "cap:open": "npx cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^7.6.10",
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/core": "^7.6.10",
+    "@capacitor/filesystem": "^7.1.9",
+    "@capacitor/haptics": "^7.0.5",
+    "@capacitor/preferences": "^7.0.4",
+    "@capacitor/share": "^7.0.4",
     "@fontsource/comfortaa": "^5.2.8",
     "@fontsource/nunito": "^5.2.7",
     "@vkontakte/vk-bridge": "^3.0.2"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.6.10",
     "@resvg/resvg-js": "^2.6.2",
     "@types/pngjs": "^6.0.5",
     "pngjs": "^7.0.0",

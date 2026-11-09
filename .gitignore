@@ -6,3 +6,11 @@ dist
 
 .smoke
 *.regions.png
+
+# Android build output. The project ignore also covers these; listed here so
+# a debug APK or a machine-local SDK path cannot be committed by accident.
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/
