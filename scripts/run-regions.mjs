@@ -7,4 +7,5 @@
 import { register } from "node:module";
 
 await register(new URL("./ts-loader.mjs", import.meta.url).href, import.meta.url);
+await import("./regions.test.ts");
 await import("./regions.ts");
