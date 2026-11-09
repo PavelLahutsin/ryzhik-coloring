@@ -1,6 +1,6 @@
 import { findAlbum, type PictureEntry } from "./data/albums";
 import { platform } from "./platform";
-import { idb } from "./platform/idb";
+import { fitsLocalBudget, idb } from "./platform/idb";
 
 /**
  * All app state lives on the device. Keys are small and versioned; the big
@@ -194,8 +194,13 @@ export const store = {
    */
   saveDraftSync(pictureId: string, paint: string, drawingId?: string): void {
     try {
+      const key = PENDING_PREFIX + pictureId;
       const pending: PendingDraft = { paint, drawingId, updatedAt: Date.now() };
-      localStorage.setItem(PENDING_PREFIX + pictureId, JSON.stringify(pending));
+      const payload = JSON.stringify(pending);
+      // A too-big copy is skipped. IndexedDB is still written by the async save,
+      // and a failed setItem must not throw into pagehide.
+      if (!fitsLocalBudget(key, payload)) return;
+      localStorage.setItem(key, payload);
     } catch {
       /* Quota: the normal IndexedDB save still runs. */
     }
@@ -204,7 +209,14 @@ export const store = {
   /** Newest first. Older entries are kept; the limit is enforced on save. */
   async drawings(): Promise<Drawing[]> {
     const index = await drawingIndex();
-    const list = await Promise.all(index.map((meta) => idb.get<Drawing>(DRAWING_PREFIX + meta.id)));
+    const legacy = await legacyById();
+    const list = await Promise.all(
+      index.map(async (meta) => {
+        const stored = await idb.get<Drawing>(DRAWING_PREFIX + meta.id);
+        if (stored?.image) return stored;
+        return legacy.get(meta.id) ?? null;
+      }),
+    );
     return list.filter((item): item is Drawing => Boolean(item && item.image));
   },
 
@@ -215,20 +227,25 @@ export const store = {
 
   /** Inserts or replaces by id. S4 writes the same id for the whole session,
    *  so autosave and a second "Готово" update one gallery entry. */
-  async upsertDrawing(drawing: Drawing): Promise<void> {
+  async upsertDrawing(drawing: Drawing): Promise<boolean> {
     const saved: Drawing = { ...drawing, updatedAt: Date.now() };
     const ok = await idb.set(DRAWING_PREFIX + saved.id, saved);
-    if (!ok) return;
+    if (!ok) return false;
     const index = (await drawingIndex()).filter((item) => item.id !== saved.id);
     index.unshift(metaOf(saved));
     const kept = index.slice(0, DRAWING_LIMIT);
-    for (const dropped of index.slice(DRAWING_LIMIT)) await idb.remove(DRAWING_PREFIX + dropped.id);
-    await idb.set(DRAWING_INDEX_KEY, kept);
+    const dropped = index.slice(DRAWING_LIMIT);
+    const indexed = await idb.set(DRAWING_INDEX_KEY, kept);
+    if (!indexed) return false;
+    for (const item of dropped) await idb.remove(DRAWING_PREFIX + item.id);
+    return true;
   },
 
   async findDrawing(id: string): Promise<Drawing | null> {
     await drawingIndex();
-    return idb.get<Drawing>(DRAWING_PREFIX + id);
+    const stored = await idb.get<Drawing>(DRAWING_PREFIX + id);
+    if (stored?.image) return stored;
+    return (await legacyById()).get(id) ?? null;
   },
 
   async removeDrawing(id: string): Promise<void> {
@@ -267,30 +284,69 @@ function metaOf(drawing: Drawing): DrawingMeta {
 
 let migration: Promise<void> | null = null;
 
-/** Moves the old single-array gallery into per-drawing records, once. */
+/**
+ * Moves the old single-array gallery into per-drawing records, once.
+ * The old array is removed only after every kept record and the new index
+ * are stored. A failure leaves the old array in place and the next read tries
+ * again, so a full quota cannot delete the gallery.
+ */
 function migrate(): Promise<void> {
-  migration ??= (async () => {
-    const legacy = await idb.get<Drawing[]>(DRAWINGS_KEY);
-    if (!legacy || legacy.length === 0) return;
-    const index = (await idb.get<DrawingMeta[]>(DRAWING_INDEX_KEY)) ?? [];
-    const known = new Set(index.map((item) => item.id));
-    for (const drawing of legacy) {
-      if (!drawing?.id || known.has(drawing.id)) continue;
-      const ok = await idb.set(DRAWING_PREFIX + drawing.id, drawing);
-      if (ok) index.push(metaOf(drawing));
-    }
-    index.sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt));
-    if (await idb.set(DRAWING_INDEX_KEY, index.slice(0, DRAWING_LIMIT))) {
-      await idb.remove(DRAWINGS_KEY);
-    }
-  })();
+  if (migration) return migration;
+  migration = migrateOnce().then(
+    () => undefined,
+    () => {
+      migration = null;
+    },
+  );
   return migration;
+}
+
+async function migrateOnce(): Promise<void> {
+  const legacy = await idb.get<Drawing[]>(DRAWINGS_KEY);
+  if (!Array.isArray(legacy) || legacy.length === 0) return;
+  const index = (await idb.get<DrawingMeta[]>(DRAWING_INDEX_KEY)) ?? [];
+  const known = new Set(index.map((item) => item.id));
+  const incoming = legacy.filter(
+    (drawing): drawing is Drawing =>
+      Boolean(drawing && typeof drawing.id === "string" && drawing.image && !known.has(drawing.id)),
+  );
+  const merged = [...index, ...incoming.map((drawing) => metaOf(drawing))];
+  merged.sort((a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0));
+  const kept = merged.slice(0, DRAWING_LIMIT);
+  const keptIds = new Set(kept.map((item) => item.id));
+  for (const drawing of incoming) {
+    if (!keptIds.has(drawing.id)) continue;
+    const ok = await idb.set(DRAWING_PREFIX + drawing.id, drawing);
+    if (!ok) throw new Error("gallery-migration");
+  }
+  if (!(await idb.set(DRAWING_INDEX_KEY, kept))) throw new Error("gallery-migration");
+  await idb.remove(DRAWINGS_KEY);
+}
+
+async function legacyById(): Promise<Map<string, Drawing>> {
+  const legacy = await idb.get<Drawing[]>(DRAWINGS_KEY);
+  const map = new Map<string, Drawing>();
+  if (!Array.isArray(legacy)) return map;
+  for (const drawing of legacy) {
+    if (drawing?.id && drawing.image) map.set(drawing.id, drawing);
+  }
+  return map;
 }
 
 async function drawingIndex(): Promise<DrawingMeta[]> {
   await migrate();
   const index = (await idb.get<DrawingMeta[]>(DRAWING_INDEX_KEY)) ?? [];
-  return [...index].sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt));
+  const byId = new Map<string, DrawingMeta>();
+  for (const item of index) {
+    if (item?.id) byId.set(item.id, item);
+  }
+  // While the old array is still here, a failed copy must not hide those pictures.
+  for (const drawing of (await legacyById()).values()) {
+    if (!byId.has(drawing.id)) byId.set(drawing.id, metaOf(drawing));
+  }
+  return [...byId.values()].sort(
+    (a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0),
+  );
 }
 
 const PENDING_PREFIX = "ryzhik:pending:";

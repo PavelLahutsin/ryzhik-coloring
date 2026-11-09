@@ -1030,6 +1030,7 @@ p {
   width: min(560px, 100%);
   max-height: 92dvh;
   padding: 12px;
+  overflow-y: auto;
   background: var(--surface);
   border-radius: var(--radius-lg);
 }
@@ -1597,13 +1598,14 @@ p {
 /* Eight colours and "ещё": 5 + 4 on a phone, one row where there is room. */
 .palette {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(5, var(--tap));
   gap: 8px 6px;
-  justify-items: center;
+  justify-content: center;
   height: auto;
   min-height: 0;
   padding: 4px 2px;
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: hidden;
   scroll-snap-type: none;
 }
 
@@ -1611,10 +1613,10 @@ p {
   position: relative;
   display: grid;
   place-items: center;
-  width: min(100%, 64px);
-  min-width: 56px;
-  height: auto;
-  aspect-ratio: 1;
+  width: var(--tap);
+  min-width: var(--tap);
+  height: var(--tap);
+  aspect-ratio: auto;
   scroll-snap-align: none;
 }
 
@@ -1678,7 +1680,7 @@ p {
 
 .more__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--tap), 1fr));
   gap: 10px;
   justify-items: center;
 }
@@ -1689,7 +1691,7 @@ p {
   }
 
   .palette {
-    grid-template-columns: repeat(9, minmax(0, 1fr));
+    grid-template-columns: repeat(9, var(--tap));
   }
 }
 
@@ -1699,7 +1701,7 @@ p {
   }
 
   .palette {
-    grid-template-columns: repeat(9, minmax(0, 1fr));
+    grid-template-columns: repeat(9, var(--tap));
     gap: 4px;
     height: auto;
     min-height: 0;

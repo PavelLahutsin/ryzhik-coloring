@@ -419,10 +419,10 @@ export function mountPicture(
   let sessionStarred = false;
 
   /**
-   * Writes the sheet to the device: the draft (the picture opens where the
-   * child stopped) and its entry in "Мои рисунки" (visible at once, finished or
-   * not). `force` commits a stroke in progress; the debounced call waits for
-   * the finger to lift instead.
+   * Writes the draft and the album progress. The gallery entry is created only
+   * in `finish` («Готово»): an unfinished sheet must not fill «Мои рисунки».
+   * `force` commits a stroke in progress; the debounced call waits for the
+   * finger to lift instead.
    */
   const persist = (force = false): Promise<void> => {
     window.clearTimeout(saveTimer);
@@ -437,7 +437,7 @@ export function mountPicture(
     dirty = false;
     const paintUrl = book.snapshot();
     if (!paintUrl) {
-      // The sheet was wiped: nothing to continue. The gallery keeps its last look.
+      // The sheet was wiped: nothing to continue. A finished gallery entry stays.
       pendingWrites += 1;
       saveChain = saveChain
         .then(() => store.clearDraft(pictureId))
@@ -449,26 +449,11 @@ export function mountPicture(
     }
     const id = sessionDrawingId ?? `${pictureId}-${Date.now()}`;
     sessionDrawingId = id;
-    const createdAt = sessionCreatedAt || Date.now();
-    sessionCreatedAt = createdAt;
-    const starred = sessionStarred;
+    if (!sessionCreatedAt) sessionCreatedAt = Date.now();
     const ratio = book.progress().ratio;
-    const imageJob = book.exportDataUrl(1280);
     pendingWrites += 1;
     saveChain = saveChain
       .then(async () => {
-        const image = await imageJob;
-        if (!image) return;
-        await store.upsertDrawing({
-          id,
-          pictureId,
-          albumId: albumId || null,
-          title,
-          image,
-          paint: paintUrl,
-          createdAt,
-          starred,
-        });
         await store.saveDraft(pictureId, paintUrl, id);
         const state = await store.pictureState(pictureId);
         await store.savePictureState(pictureId, {
@@ -485,14 +470,18 @@ export function mountPicture(
 
   /**
    * Synchronous safety copy for a page that is closing. IndexedDB writes are
-   * async and may not finish when the app is swiped away right after a tap, so
-   * the paint is also written to localStorage; the next start recovers it.
+   * async and may not finish when the app is swiped away right after a tap.
+   * The copy is a small PNG: a full-resolution sheet does not fit in the
+   * ~5 MB localStorage quota next to settings and progress.
    */
   const emergencySave = (): void => {
     if (!loaded || (!dirty && pendingWrites === 0)) return;
     book.flush();
-    const paintUrl = book.snapshot() ?? "";
-    if (paintUrl) sessionDrawingId ??= `${pictureId}-${Date.now()}`;
+    const paintUrl = book.snapshot(640) ?? "";
+    if (paintUrl) {
+      sessionDrawingId ??= `${pictureId}-${Date.now()}`;
+      if (!sessionCreatedAt) sessionCreatedAt = Date.now();
+    }
     store.saveDraftSync(pictureId, paintUrl, sessionDrawingId ?? undefined);
   };
 
@@ -515,26 +504,47 @@ export function mountPicture(
       closeSizePopover();
       closeMore();
       // "Готово" is always allowed and always cheerful: any amount of paint gets
-      // the same reward screen. The star is given once per drawing.
+      // the same reward screen. The star is given once per drawing, and only
+      // after that drawing is actually in the gallery.
       const painted = book.hasPaint();
-      let newStar = false;
-      if (painted && !sessionDrawingId) dirty = true;
-      if (painted && !sessionStarred) {
-        sessionStarred = true;
-        newStar = true;
-        dirty = true;
-        await store.awardStar();
-      }
+      if (painted) dirty = true;
       await persist(true);
+      let newStar = false;
+      let savedId = "-";
       if (painted) {
-        await store.savePictureState(pictureId, { ratio: book.progress().ratio, status: "done" });
-        await store.clearDraft(pictureId);
+        const id = sessionDrawingId ?? `${pictureId}-${Date.now()}`;
+        sessionDrawingId = id;
+        if (!sessionCreatedAt) sessionCreatedAt = Date.now();
+        const image = await book.exportDataUrl(1280);
+        const paintUrl = book.snapshot();
+        if (image && paintUrl) {
+          const willStar = !sessionStarred;
+          const wrote = await store.upsertDrawing({
+            id,
+            pictureId,
+            albumId: albumId || null,
+            title,
+            image,
+            paint: paintUrl,
+            createdAt: sessionCreatedAt,
+            starred: sessionStarred || willStar,
+          });
+          if (wrote) {
+            savedId = id;
+            if (willStar) {
+              sessionStarred = true;
+              newStar = true;
+              await store.awardStar();
+            }
+            await store.savePictureState(pictureId, { ratio: book.progress().ratio, status: "done" });
+            await store.clearDraft(pictureId);
+          }
+        }
       }
       platform.haptics("success");
       sound.play("done");
       disposed = true;
-      const saved = painted && sessionDrawingId ? sessionDrawingId : "-";
-      navigate(`/reward/${pictureId}/${saved}${newStar ? "/star" : ""}`);
+      navigate(`/reward/${pictureId}/${savedId}${newStar ? "/star" : ""}`);
     } finally {
       saving = false;
       doneBtn.disabled = false;
@@ -546,7 +556,7 @@ export function mountPicture(
   // Every finished fill, stroke, undo or clear schedules a save, so nothing the
   // child did is lost if the app is closed right after.
   book.onPaint = () => {
-    if (loaded) scheduleSave();
+    if (loaded && !disposed) scheduleSave();
   };
   book.onZoom = (zoomed) => {
     zoomBtn.hidden = !zoomed;
@@ -619,9 +629,13 @@ export function mountPicture(
         sessionCreatedAt = wanted.createdAt;
         sessionStarred = wanted.starred === true;
         const newer = await store.draft(pictureId);
-        if (newer?.recovered && newer.drawingId === wanted.id) {
+        const draftIsNewer =
+          Boolean(newer?.paint) &&
+          newer?.drawingId === wanted.id &&
+          (newer?.updatedAt ?? 0) >= (wanted.updatedAt ?? wanted.createdAt);
+        if (draftIsNewer && newer?.paint) {
           await book.restore(newer.paint);
-          recovered = true;
+          recovered = newer.recovered === true;
         } else if (wanted.paint) await book.restore(wanted.paint);
         else await book.restoreFlattened(wanted.image);
       } else {
@@ -663,13 +677,16 @@ export function mountPicture(
   window.addEventListener("keydown", onKey);
 
   return () => {
-document.removeEventListener("visibilitychange", onHide);
+    document.removeEventListener("visibilitychange", onHide);
     window.removeEventListener("pagehide", onPageHide);
     window.removeEventListener("keydown", onKey);
     window.clearTimeout(toastTimer);
     closeMore();
-    void persist(true);
+    book.flush();
     disposed = true;
+    window.clearTimeout(saveTimer);
+    book.dispose();
+    void persist(true);
   };
 }
 

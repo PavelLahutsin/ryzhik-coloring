@@ -96,6 +96,10 @@ export class ColoringBook {
   } | null = null;
   private panStart: { x: number; y: number; zx: number; zy: number } | null = null;
   private surface: HTMLElement;
+  private resizeObserver: ResizeObserver | null = null;
+  private disposed = false;
+  /** Window listeners used when the sheet cannot capture a pointer. */
+  private windowReleases: Array<() => void> = [];
 
   onHistory: (() => void) | null = null;
   /** Fired after a fill or a finished stroke, with the picture progress. */
@@ -120,12 +124,47 @@ export class ColoringBook {
     box.addEventListener("pointermove", this.onPointerMove, { passive: false });
     box.addEventListener("pointerup", this.onPointerUp);
     box.addEventListener("pointercancel", this.onPointerCancel);
+    box.addEventListener("lostpointercapture", this.onLostCapture);
     box.addEventListener("wheel", this.onWheel, { passive: false });
-    box.addEventListener("contextmenu", (event) => event.preventDefault());
-    new ResizeObserver(() => {
+    box.addEventListener("contextmenu", this.onContextMenu);
+    this.resizeObserver = new ResizeObserver(() => {
       this.layout();
       this.resetZoom();
-    }).observe(box);
+    });
+    this.resizeObserver.observe(box);
+  }
+
+  /**
+   * Drops pointer listeners and the resize observer. The screen calls this
+   * when it leaves, so a closed picture does not keep handling touches.
+   */
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    this.surface.removeEventListener("pointerdown", this.onPointerDown);
+    this.surface.removeEventListener("pointermove", this.onPointerMove);
+    this.surface.removeEventListener("pointerup", this.onPointerUp);
+    this.surface.removeEventListener("pointercancel", this.onPointerCancel);
+    this.surface.removeEventListener("lostpointercapture", this.onLostCapture);
+    this.surface.removeEventListener("wheel", this.onWheel);
+    this.surface.removeEventListener("contextmenu", this.onContextMenu);
+    for (const drop of this.windowReleases) drop();
+    this.windowReleases = [];
+    for (const id of this.pointers.keys()) {
+      try {
+        this.surface.releasePointerCapture(id);
+      } catch {
+        /* Capture may already be gone. */
+      }
+    }
+    this.pointers.clear();
+    this.pointerId = null;
+    this.gesturing = false;
+    this.panning = false;
+    this.pinchStart = null;
+    this.panStart = null;
   }
 
   /** A finger is down: autosave waits, so it never cuts a line in half. */
@@ -295,8 +334,16 @@ export class ColoringBook {
    * Paint layer as a PNG data URL. Only the paint, not the line art: a draft
    * stays small and survives a change of picture assets.
    */
-  snapshot(): string | null {
+  snapshot(maxSide = 0): string | null {
     if (!this.ready || !this.hasPaint()) return null;
+    const longest = Math.max(this.w, this.h);
+    if (maxSide > 0 && longest > maxSide) {
+      const scale = maxSide / longest;
+      const target = makeCanvas(Math.max(1, Math.round(this.w * scale)), Math.max(1, Math.round(this.h * scale)), false);
+      target.ctx.imageSmoothingEnabled = true;
+      target.ctx.drawImage(this.paint.canvas, 0, 0, target.canvas.width, target.canvas.height);
+      return target.canvas.toDataURL("image/png");
+    }
     return this.paint.canvas.toDataURL("image/png");
   }
 
@@ -669,14 +716,31 @@ export class ColoringBook {
   }
 
   private onPointerDown = (event: PointerEvent): void => {
-    if (!this.ready) return;
+    if (!this.ready || this.disposed) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     event.preventDefault();
     this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     try {
       this.surface.setPointerCapture(event.pointerId);
     } catch {
-      /* The pointer can already be gone on a quick tap. */
+      /* The pointer can already be gone on a quick tap. pointerup still
+         arrives on the window, otherwise `pointers` would keep a dead finger
+         and autosave would wait forever. */
+      const id = event.pointerId;
+      const release = (up: PointerEvent): void => {
+        if (up.pointerId !== id) return;
+        drop();
+        if (up.type === "pointercancel") this.onPointerCancel(up);
+        else this.onPointerUp(up);
+      };
+      const drop = (): void => {
+        window.removeEventListener("pointerup", release);
+        window.removeEventListener("pointercancel", release);
+        this.windowReleases = this.windowReleases.filter((item) => item !== drop);
+      };
+      window.addEventListener("pointerup", release);
+      window.addEventListener("pointercancel", release);
+      this.windowReleases.push(drop);
     }
 
     if (this.pointers.size >= 2) {
@@ -706,6 +770,7 @@ export class ColoringBook {
   };
 
   private onPointerMove = (event: PointerEvent): void => {
+    if (this.disposed) return;
     const known = this.pointers.get(event.pointerId);
     if (!known) return;
     event.preventDefault();
@@ -776,6 +841,16 @@ export class ColoringBook {
     this.finishStroke();
   };
 
+  private onContextMenu = (event: Event): void => {
+    event.preventDefault();
+  };
+
+  /** Capture ended without a pointerup (the node went away). Do not fill. */
+  private onLostCapture = (event: PointerEvent): void => {
+    if (!this.pointers.has(event.pointerId)) return;
+    this.onPointerCancel(event);
+  };
+
   private onPointerCancel = (event: PointerEvent): void => {
     if (!this.pointers.has(event.pointerId)) return;
     // The system took the touch (an edge swipe, a call). Keep what was drawn
@@ -796,7 +871,7 @@ export class ColoringBook {
 
   /** Desktop testing: wheel zooms around the cursor. */
   private onWheel = (event: WheelEvent): void => {
-    if (!this.ready) return;
+    if (!this.ready || this.disposed) return;
     event.preventDefault();
     const factor = Math.exp(-event.deltaY * 0.0015);
     this.zoomAround(event.clientX, event.clientY, this.zoom.scale * factor);
