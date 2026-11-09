@@ -14,39 +14,48 @@ import { topbar } from "../ui/topbar";
  * Colouring logic itself lives in engine.ts and is untouched here: this screen
  * only wires the chrome around it.
  */
-const PALETTE = [
+type ColorEntry = { name: string; hex: string };
+
+/**
+ * Eight big colours that are always on screen. Orange and green are sampled
+ * from src/assets/ryzhik/ryzhik-wave.webp, yellow is --yellow (the star colour)
+ * from docs/design.md.
+ */
+const MAIN_COLORS: ColorEntry[] = [
   { name: "Красный", hex: "#ff4b4b" },
-  { name: "Тёмно-красный", hex: "#d62828" },
-  { name: "Оранжевый", hex: "#ff8a3d" },
-  { name: "Персиковый", hex: "#ffb07a", light: true },
-  { name: "Бежевый", hex: "#f3d2b3", light: true },
-  { name: "Золотой", hex: "#ffc94a" },
-  { name: "Светло-жёлтый", hex: "#ffe08a", light: true },
-  { name: "Салатовый", hex: "#c6e04a" },
-  { name: "Светло-зелёный", hex: "#8be08a" },
-  { name: "Зелёный", hex: "#3cbf4a" },
-  { name: "Тёмно-зелёный", hex: "#1f8a3b" },
-  { name: "Изумрудный", hex: "#1e8e71" },
-  { name: "Тёмно-изумрудный", hex: "#12654f" },
+  { name: "Рыжий", hex: "#f08c35" },
+  { name: "Жёлтый", hex: "#ffc94a" },
+  { name: "Зелёный", hex: "#5a814b" },
   { name: "Голубой", hex: "#7ad7ff" },
-  { name: "Бирюзовый", hex: "#3ec6c6" },
   { name: "Синий", hex: "#4c8dff" },
+  { name: "Розовый", hex: "#ff7eb6" },
+  { name: "Коричневый", hex: "#a56a3c" },
+];
+
+/** The rest of the expanded palette: with the eight above it is 24 colours. */
+const MORE_COLORS: ColorEntry[] = [
+  { name: "Тёмно-красный", hex: "#d62828" },
+  { name: "Персиковый", hex: "#ffb07a" },
+  { name: "Бежевый", hex: "#f3d2b3" },
+  { name: "Светло-жёлтый", hex: "#ffe08a" },
+  { name: "Салатовый", hex: "#c6e04a" },
+  { name: "Ярко-зелёный", hex: "#3cbf4a" },
+  { name: "Тёмно-зелёный", hex: "#1f8a3b" },
+  { name: "Бирюзовый", hex: "#3ec6c6" },
   { name: "Тёмно-синий", hex: "#2a5bd7" },
   { name: "Сиреневый", hex: "#c9a6ff" },
   { name: "Фиолетовый", hex: "#a878ff" },
-  { name: "Тёмно-фиолетовый", hex: "#7a45d1" },
-  { name: "Розовый", hex: "#ff7eb6" },
-  { name: "Светло-розовый", hex: "#ffb3d4", light: true },
+  { name: "Светло-розовый", hex: "#ffb3d4" },
   { name: "Светло-коричневый", hex: "#c4844a" },
-  { name: "Коричневый", hex: "#a56a3c" },
-  { name: "Тёмно-коричневый", hex: "#6b3e22" },
-  { name: "Серый", hex: "#b9b1a8", light: true },
-  { name: "Белый", hex: "#ffffff", light: true },
+  { name: "Серый", hex: "#b9b1a8" },
+  { name: "Белый", hex: "#ffffff" },
   { name: "Чёрный", hex: "#2a211c" },
 ];
 
-const DONE_RATIO = 0.85;
-const AUTOSAVE_MS = 3000;
+const ALL_COLORS: ColorEntry[] = [...MAIN_COLORS, ...MORE_COLORS];
+
+/** A save is scheduled this long after the last action, and never mid-stroke. */
+const SAVE_DELAY_MS = 500;
 
 type KidTool = Extract<Tool, "fill" | "brush" | "eraser">;
 
@@ -56,7 +65,11 @@ const TOOL_HINTS: Record<KidTool, string> = {
   eraser: "Ластик стирает краску",
 };
 
-export function mountPicture(root: HTMLElement, pictureId: string): () => void {
+export function mountPicture(
+  root: HTMLElement,
+  pictureId: string,
+  drawingId?: string,
+): () => void {
   const picture = findPicture(albumOfPicture(pictureId)?.id ?? "", pictureId);
   const album = albumOfPicture(pictureId);
   const art = artFor(pictureId);
@@ -101,6 +114,21 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
   const toast = el("p", { class: "toast", attrs: { role: "status", hidden: true } });
   const frame = el("div", { class: "paint__frame" }, [stage, loading, toast]);
 
+  const zoomBtn = el(
+    "button",
+    {
+      class: "zoomreset",
+      attrs: { type: "button", hidden: true, "aria-label": "Вернуть как было" },
+      on: {
+        click: () => {
+          book.resetZoom();
+          sound.play("tap");
+        },
+      },
+    },
+    [icon("fit", 30)],
+  );
+
   const paint = el("div", { class: "paint" }, [
     topbar({
       title,
@@ -109,7 +137,7 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
       trailing: [undoBtn, redoBtn, doneBtn],
       class: "topbar--paint",
     }),
-    el("div", { class: "paint__canvas" }, [magnetBtn, frame]),
+    el("div", { class: "paint__canvas" }, [magnetBtn, zoomBtn, frame]),
     el("div", { class: "dock" }, [
       el("p", { class: "dock__cap", text: "Инструменты" }),
       toolsRow,
@@ -125,13 +153,15 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
   book.onSound = (event) => sound.play(event);
   let settings: Settings | undefined;
   let tool: KidTool = "fill";
-  let color = PALETTE[1].hex;
+  let color = MAIN_COLORS[1].hex;
   let sizes: Record<"brush" | "eraser", number> = { brush: 16, eraser: 26 };
   let disposed = false;
   let saving = false;
   /** Id of the gallery entry this session writes to, so repeats update it. */
   let sessionDrawingId: string | null = null;
   let sizePopover: HTMLElement | null = null;
+  let morePanel: HTMLElement | null = null;
+  let fillOnly = false;
 
   let toastTimer = 0;
   const showToast = (text: string): void => {
@@ -231,7 +261,8 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
       { kind: "brush", label: "Кисть" },
       { kind: "eraser", label: "Ластик" },
     ];
-    for (const item of items) {
+    toolsRow.classList.toggle("tools--single", fillOnly);
+    for (const item of fillOnly ? items.slice(0, 1) : items) {
       const node = el(
         "button",
         {
@@ -248,7 +279,7 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
       toolsRow.append(node);
     }
 
-    toolsRow.append(
+    if (!fillOnly) toolsRow.append(
       holdButton({
         label: "Очистить",
         icon: icon("clear", 32),
@@ -275,88 +306,235 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
     }
   };
 
-  const renderPalette = (): void => {
-    for (const entry of PALETTE) {
-      const light = entry.light === true || entry.hex === "#ffffff";
-      paletteRow.append(
-        el("button", {
-          class: `swatch${light ? " swatch--light" : ""}${entry.hex === color ? " is-active" : ""}`,
-          attrs: { type: "button", role: "option", "aria-label": entry.name, "aria-selected": String(entry.hex === color) },
-          dataset: { color: entry.hex },
-          style: { background: entry.hex },
-          on: {
-            click: () => {
-              color = entry.hex;
-              book.setColor(color);
-              sound.play("tap");
-              hint.textContent = entry.name;
-              paletteRow.querySelectorAll<HTMLElement>(".swatch").forEach((node) => {
-                const active = node.dataset.color === color;
-                node.classList.toggle("is-active", active);
-                node.setAttribute("aria-selected", String(active));
-              });
-            },
-          },
-        }),
-      );
+  const lightSwatch = (hex: string): boolean => {
+    const n = Number.parseInt(hex.slice(1), 16);
+    const luma = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+    return luma > 0.62;
+  };
+
+  const closeMore = (): void => {
+    morePanel?.remove();
+    morePanel = null;
+  };
+
+  const pickColor = (entry: ColorEntry): void => {
+    color = entry.hex;
+    book.setColor(color);
+    sound.play("tap");
+    hint.textContent = entry.name;
+    closeMore();
+    renderPalette();
+  };
+
+  const swatch = (entry: ColorEntry): HTMLButtonElement => {
+    const selected = entry.hex === color;
+    const light = lightSwatch(entry.hex);
+    return el(
+      "button",
+      {
+        class: `swatch${light ? " swatch--light" : ""}${selected ? " is-active" : ""}`,
+        attrs: {
+          type: "button",
+          role: "option",
+          "aria-label": entry.name,
+          "aria-selected": String(selected),
+        },
+        dataset: { color: entry.hex },
+        style: { background: entry.hex, color: light ? "#2a211c" : "#ffffff" },
+        on: { click: () => pickColor(entry) },
+      },
+      [el("span", { class: "swatch__check", attrs: { "aria-hidden": "true" } }, [icon("check", 30)])],
+    );
+  };
+
+  /** "ещё": a sheet with all 24 colours. A colour tap or the cross closes it. */
+  const openMore = (): void => {
+    if (morePanel) {
+      closeMore();
+      return;
     }
+    sound.play("tap");
+    const close = el(
+      "button",
+      {
+        class: "topbar__btn more__close",
+        attrs: { type: "button", "aria-label": "Закрыть" },
+        on: { click: closeMore },
+      },
+      [icon("close", 30)],
+    );
+    const grid = el(
+      "div",
+      { class: "more__grid", attrs: { role: "listbox", "aria-label": "Все цвета" } },
+      ALL_COLORS.map((entry) => swatch(entry)),
+    );
+    const overlay: HTMLElement = el(
+      "div",
+      {
+        class: "more",
+        on: {
+          click: (event) => {
+            if (event.target === overlay) closeMore();
+          },
+        },
+      },
+      [el("div", { class: "more__panel" }, [close, grid])],
+    );
+    paint.append(overlay);
+    morePanel = overlay;
+  };
+
+  const renderPalette = (): void => {
+    // A colour picked from the sheet is shown on the "ещё" button itself, so the
+    // current colour is always visible and marked.
+    const extra = !MAIN_COLORS.some((entry) => entry.hex === color);
+    const more = el(
+      "button",
+      {
+        class: `swatch swatch--more${extra ? " is-active" : ""}`,
+        attrs: { type: "button", "aria-label": "Ещё цвета", "aria-haspopup": "dialog" },
+        on: { click: openMore },
+      },
+      [
+        el("span", {
+          class: "more__core",
+          text: "ещё",
+          style: extra ? { background: color, color: lightSwatch(color) ? "#2a211c" : "#ffffff" } : {},
+        }),
+      ],
+    );
+    paletteRow.replaceChildren(...MAIN_COLORS.map((entry) => swatch(entry)), more);
   };
 
   // --- persistence ----------------------------------------------------------
-  const autosave = (): void => {
-    if (disposed || !book.hasPaint()) {
-      if (!disposed) void store.clearDraft(pictureId);
-      return;
+  let loaded = false;
+  let dirty = false;
+  let saveTimer = 0;
+  let saveChain: Promise<void> = Promise.resolve();
+  /** Async writes that have started and not finished yet. */
+  let pendingWrites = 0;
+  /** The draft came from the last-gasp copy: write it to the gallery too. */
+  let recovered = false;
+  let sessionCreatedAt = 0;
+  let sessionStarred = false;
+
+  /**
+   * Writes the sheet to the device: the draft (the picture opens where the
+   * child stopped) and its entry in "Мои рисунки" (visible at once, finished or
+   * not). `force` commits a stroke in progress; the debounced call waits for
+   * the finger to lift instead.
+   */
+  const persist = (force = false): Promise<void> => {
+    window.clearTimeout(saveTimer);
+    if (!loaded) return saveChain;
+    if (!force && book.busy) {
+      saveTimer = window.setTimeout(() => void persist(), SAVE_DELAY_MS);
+      return saveChain;
     }
     book.flush();
-    const snapshot = book.snapshot();
-    if (snapshot) void store.saveDraft(pictureId, snapshot);
-    else void store.clearDraft(pictureId);
+    window.clearTimeout(saveTimer);
+    if (!dirty) return saveChain;
+    dirty = false;
+    const paintUrl = book.snapshot();
+    if (!paintUrl) {
+      // The sheet was wiped: nothing to continue. The gallery keeps its last look.
+      pendingWrites += 1;
+      saveChain = saveChain
+        .then(() => store.clearDraft(pictureId))
+        .catch(() => undefined)
+        .then(() => {
+          pendingWrites -= 1;
+        });
+      return saveChain;
+    }
+    const id = sessionDrawingId ?? `${pictureId}-${Date.now()}`;
+    sessionDrawingId = id;
+    const createdAt = sessionCreatedAt || Date.now();
+    sessionCreatedAt = createdAt;
+    const starred = sessionStarred;
+    const ratio = book.progress().ratio;
+    const imageJob = book.exportDataUrl(1280);
+    pendingWrites += 1;
+    saveChain = saveChain
+      .then(async () => {
+        const image = await imageJob;
+        if (!image) return;
+        await store.upsertDrawing({
+          id,
+          pictureId,
+          albumId: albumId || null,
+          title,
+          image,
+          paint: paintUrl,
+          createdAt,
+          starred,
+        });
+        await store.saveDraft(pictureId, paintUrl, id);
+        const state = await store.pictureState(pictureId);
+        await store.savePictureState(pictureId, {
+          ratio,
+          status: state?.status === "done" ? "done" : "draft",
+        });
+      })
+      .catch(() => undefined)
+      .then(() => {
+        pendingWrites -= 1;
+      });
+    return saveChain;
+  };
+
+  /**
+   * Synchronous safety copy for a page that is closing. IndexedDB writes are
+   * async and may not finish when the app is swiped away right after a tap, so
+   * the paint is also written to localStorage; the next start recovers it.
+   */
+  const emergencySave = (): void => {
+    if (!loaded || (!dirty && pendingWrites === 0)) return;
+    book.flush();
+    const paintUrl = book.snapshot() ?? "";
+    if (paintUrl) sessionDrawingId ??= `${pictureId}-${Date.now()}`;
+    store.saveDraftSync(pictureId, paintUrl, sessionDrawingId ?? undefined);
+  };
+
+  const scheduleSave = (): void => {
+    dirty = true;
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => void persist(), SAVE_DELAY_MS);
   };
 
   const leave = (path: string): void => {
-    autosave();
+    void persist(true);
     navigate(path);
   };
 
   const finish = async (): Promise<void> => {
-    if (saving) return;
+    if (saving || !loaded) return;
     saving = true;
     doneBtn.disabled = true;
     try {
-      const image = await book.exportDataUrl(1280);
-      if (!image) return;
-      const current = book.progress();
-      const complete = current.ratio >= DONE_RATIO;
-      const id = sessionDrawingId ?? `${pictureId}-${Date.now()}`;
-      sessionDrawingId = id;
-      await store.upsertDrawing({
-        id,
-        pictureId,
-        albumId: albumId || null,
-        title,
-        image,
-        createdAt: Date.now(),
-      });
-      await store.savePictureState(pictureId, {
-        ratio: current.ratio,
-        status: complete ? "done" : "draft",
-      });
-      if (complete) {
-        await store.clearDraft(pictureId);
+      closeSizePopover();
+      closeMore();
+      // "Готово" is always allowed and always cheerful: any amount of paint gets
+      // the same reward screen. The star is given once per drawing.
+      const painted = book.hasPaint();
+      let newStar = false;
+      if (painted && !sessionDrawingId) dirty = true;
+      if (painted && !sessionStarred) {
+        sessionStarred = true;
+        newStar = true;
+        dirty = true;
         await store.awardStar();
-        platform.haptics("success");
-        sound.play("done");
-        disposed = true;
-        navigate(`/reward/${pictureId}`);
-        return;
       }
-      await store.saveDraft(pictureId, book.snapshot() ?? "");
-      sound.say("Ещё чуть-чуть?");
-      hint.textContent = "Ещё чуть-чуть? Рисунок уже сохранён";
-      window.setTimeout(() => {
-        if (!disposed) hint.textContent = TOOL_HINTS[tool];
-      }, 2600);
+      await persist(true);
+      if (painted) {
+        await store.savePictureState(pictureId, { ratio: book.progress().ratio, status: "done" });
+        await store.clearDraft(pictureId);
+      }
+      platform.haptics("success");
+      sound.play("done");
+      disposed = true;
+      const saved = painted && sessionDrawingId ? sessionDrawingId : "-";
+      navigate(`/reward/${pictureId}/${saved}${newStar ? "/star" : ""}`);
     } finally {
       saving = false;
       doneBtn.disabled = false;
@@ -365,10 +543,13 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
 
   // --- wiring ---------------------------------------------------------------
   book.onHistory = syncHistory;
-  // Progress feeds the album dots and the 85 % rule in `finish`. Status stays
-  // "draft" until the child presses Готово on a finished picture.
-  book.onPaint = (progress) => {
-    void store.savePictureState(pictureId, { ratio: progress.ratio, status: "draft" });
+  // Every finished fill, stroke, undo or clear schedules a save, so nothing the
+  // child did is lost if the app is closed right after.
+  book.onPaint = () => {
+    if (loaded) scheduleSave();
+  };
+  book.onZoom = (zoomed) => {
+    zoomBtn.hidden = !zoomed;
   };
 
   undoBtn.addEventListener("click", () => {
@@ -399,11 +580,17 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
   const canvasBox = paint.querySelector<HTMLElement>(".paint__canvas")!;
   canvasBox.addEventListener("pointerdown", () => sound.unlock(), { once: true });
 
-  const onVisibility = (): void => {
-    if (document.visibilityState === "hidden") autosave();
+  const onHide = (): void => {
+    if (document.visibilityState !== "hidden") return;
+    emergencySave();
+    void persist(true);
   };
-  document.addEventListener("visibilitychange", onVisibility);
-  const autosaveTimer = window.setInterval(autosave, AUTOSAVE_MS);
+  const onPageHide = (): void => {
+    emergencySave();
+    void persist(true);
+  };
+  document.addEventListener("visibilitychange", onHide);
+  window.addEventListener("pagehide", onPageHide);
 
   renderTools();
   renderPalette();
@@ -415,6 +602,9 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
     setMagnet(settings.magnet);
     book.setColor(color);
     book.setTool("fill");
+    fillOnly = settings.fillOnly;
+    magnetBtn.hidden = fillOnly;
+    renderTools();
 
     if (!art) {
       loading.textContent = "Картинка не найдена";
@@ -423,9 +613,32 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
     try {
       await book.load(art.svg, art.png ?? art.svg);
       loading.remove();
-      const draft = await store.draft(pictureId);
-      if (draft?.paint) await book.restore(draft.paint);
+      const wanted = drawingId ? await store.findDrawing(drawingId) : null;
+      if (wanted) {
+        sessionDrawingId = wanted.id;
+        sessionCreatedAt = wanted.createdAt;
+        sessionStarred = wanted.starred === true;
+        const newer = await store.draft(pictureId);
+        if (newer?.recovered && newer.drawingId === wanted.id) {
+          await book.restore(newer.paint);
+          recovered = true;
+        } else if (wanted.paint) await book.restore(wanted.paint);
+        else await book.restoreFlattened(wanted.image);
+      } else {
+        const draft = await store.draft(pictureId);
+        if (draft?.paint) {
+          const owner = draft.drawingId ? await store.findDrawing(draft.drawingId) : null;
+          sessionDrawingId = owner ? owner.id : null;
+          sessionCreatedAt = owner?.createdAt ?? 0;
+          sessionStarred = owner?.starred === true;
+          await book.restore(draft.paint);
+          recovered = draft.recovered === true;
+        }
+      }
+      loaded = true;
+      dirty = false;
       syncHistory();
+      if (recovered) scheduleSave();
     } catch {
       loading.textContent = "Не получилось открыть рисунок. Обновите страницу.";
       return;
@@ -450,11 +663,12 @@ export function mountPicture(root: HTMLElement, pictureId: string): () => void {
   window.addEventListener("keydown", onKey);
 
   return () => {
-    document.removeEventListener("visibilitychange", onVisibility);
+document.removeEventListener("visibilitychange", onHide);
+    window.removeEventListener("pagehide", onPageHide);
     window.removeEventListener("keydown", onKey);
-    window.clearInterval(autosaveTimer);
     window.clearTimeout(toastTimer);
-    autosave();
+    closeMore();
+    void persist(true);
     disposed = true;
   };
 }

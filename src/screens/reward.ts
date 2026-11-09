@@ -9,7 +9,12 @@ import { icon } from "../ui/icons";
  * S5. One star per finished picture, no grades, no waiting. Buttons are live
  * from the first frame so the child never sits through the confetti.
  */
-export function renderReward(root: HTMLElement, pictureId: string): () => void {
+export function renderReward(
+  root: HTMLElement,
+  pictureId: string,
+  drawingId?: string,
+  newStar = false,
+): () => void {
   const picture = findPicture(albumOfPicture(pictureId)?.id ?? "", pictureId);
   const albumId = albumOfPicture(pictureId)?.id ?? "";
 
@@ -22,7 +27,7 @@ export function renderReward(root: HTMLElement, pictureId: string): () => void {
     el("h1", { class: "reward__title", text: "Как красиво!" }),
     el("p", { class: "reward__star" }, [
       icon("star", 34),
-      el("span", { text: " +1  ·  всего " }),
+      el("span", { text: newStar ? " +1  ·  всего " : " всего " }),
       starsValue,
     ]),
     el("div", { class: "reward__actions" }, [
@@ -52,7 +57,11 @@ export function renderReward(root: HTMLElement, pictureId: string): () => void {
   void (async () => {
     const [progress, drawings] = await Promise.all([store.progress(), store.drawings()]);
     starsValue.textContent = String(progress.stars);
-    const drawing = drawings.find((item) => item.pictureId === pictureId);
+    // "-" is "Готово" on a clean sheet: nothing was saved, so no thumbnail of an
+    // older drawing. No id at all is a link from before drawing ids existed.
+    const drawing = drawingId
+      ? drawings.find((item) => item.id === drawingId)
+      : drawings.find((item) => item.pictureId === pictureId);
     if (drawing) {
       thumb.replaceChildren(el("img", { attrs: { src: drawing.image, alt: "" } }));
     } else if (picture) {

@@ -7,6 +7,10 @@ const TARGET_WIDTH = REGION_RASTER_WIDTH;
 const HISTORY_LIMIT = 30;
 /** Pixels darker than this are the line art, not empty paper. */
 const INK_ALPHA = 72;
+/** Pinch zoom range. 1 is "the whole picture fits". */
+const MAX_ZOOM = 5;
+/** A finger that moved less than this (CSS px) still counts as a tap. */
+const TAP_SLOP = 14;
 
 type Rgb = { r: number; g: number; b: number };
 type Layer = { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D };
@@ -77,11 +81,29 @@ export class ColoringBook {
   private downCss = { x: 0, y: 0 };
   private last: { x: number; y: number } | null = null;
 
+  /** Every finger currently on the sheet, by pointer id, in client px. */
+  private pointers = new Map<number, { x: number; y: number }>();
+  /** Set once a second finger lands; cleared when the last finger lifts.
+   *  While set nothing paints, so a pinch can never turn into a fill. */
+  private gesturing = false;
+  /** One-finger drag of a zoomed picture with the fill tool. */
+  private panning = false;
+  private zoom = { scale: 1, x: 0, y: 0 };
+  private pinchStart: {
+    dist: number;
+    mid: { x: number; y: number };
+    zoom: { scale: number; x: number; y: number };
+  } | null = null;
+  private panStart: { x: number; y: number; zx: number; zy: number } | null = null;
+  private surface: HTMLElement;
+
   onHistory: (() => void) | null = null;
   /** Fired after a fill or a finished stroke, with the picture progress. */
   onPaint: ((progress: PaintProgress) => void) | null = null;
   /** UI-only. A finished fill, or a dab that is not the eraser. */
   onSound: ((event: "fill" | "stroke") => void) | null = null;
+  /** True while the picture is zoomed in, so the screen can show "reset". */
+  onZoom: ((zoomed: boolean) => void) | null = null;
 
   constructor(
     private view: HTMLCanvasElement,
@@ -90,13 +112,35 @@ export class ColoringBook {
     const ctx = view.getContext("2d");
     if (!ctx) throw new Error("canvas");
     this.viewCtx = ctx;
-    view.addEventListener("pointerdown", this.onPointerDown, { passive: false });
-    view.addEventListener("pointermove", this.onPointerMove, { passive: false });
-    view.addEventListener("pointerup", this.onPointerUp);
-    view.addEventListener("pointercancel", this.onPointerUp);
-    view.addEventListener("contextmenu", (event) => event.preventDefault());
+    // Pointers are read on the frame around the sheet, not on the sheet
+    // itself: the second finger of a pinch often lands next to the picture.
     const box = stage.parentElement ?? stage;
-    new ResizeObserver(() => this.layout()).observe(box);
+    this.surface = box;
+    box.addEventListener("pointerdown", this.onPointerDown, { passive: false });
+    box.addEventListener("pointermove", this.onPointerMove, { passive: false });
+    box.addEventListener("pointerup", this.onPointerUp);
+    box.addEventListener("pointercancel", this.onPointerCancel);
+    box.addEventListener("wheel", this.onWheel, { passive: false });
+    box.addEventListener("contextmenu", (event) => event.preventDefault());
+    new ResizeObserver(() => {
+      this.layout();
+      this.resetZoom();
+    }).observe(box);
+  }
+
+  /** A finger is down: autosave waits, so it never cuts a line in half. */
+  get busy(): boolean {
+    return this.stroking || this.pointers.size > 0;
+  }
+
+  get zoomed(): boolean {
+    return this.zoom.scale > 1.01;
+  }
+
+  /** "Вернуть как было": the whole picture, centred, no zoom. */
+  resetZoom(): void {
+    this.zoom = { scale: 1, x: 0, y: 0 };
+    this.applyZoom();
   }
 
   get canUndo(): boolean {
@@ -271,6 +315,36 @@ export class ColoringBook {
     this.emitPaint();
   }
 
+  /**
+   * Restores paint from a flattened gallery PNG (older entries kept no paint
+   * layer). Paper white and the line pixels are dropped, the colour stays.
+   */
+  async restoreFlattened(dataUrl: string): Promise<void> {
+    if (!this.ready || !dataUrl) return;
+    const image = await loadImage(dataUrl).catch(() => null);
+    if (!image) return;
+    const ctx = this.scratch.ctx;
+    reset(ctx);
+    ctx.clearRect(0, 0, this.w, this.h);
+    ctx.drawImage(image, 0, 0, this.w, this.h);
+    const pixels = ctx.getImageData(0, 0, this.w, this.h);
+    const data = pixels.data;
+    for (let i = 0, p = 0; i < this.labels.length; i++, p += 4) {
+      const paper = data[p] > 240 && data[p + 1] > 240 && data[p + 2] > 240;
+      if (this.labels[i] === 0 || paper) data[p + 3] = 0;
+      else data[p + 3] = 255;
+    }
+    ctx.clearRect(0, 0, this.w, this.h);
+    reset(this.paint.ctx);
+    this.paint.ctx.clearRect(0, 0, this.w, this.h);
+    this.paint.ctx.putImageData(pixels, 0, 0);
+    this.undoStack.length = 0;
+    this.redoStack.length = 0;
+    this.render();
+    this.emit();
+    this.emitPaint();
+  }
+
   /** Share of the paintable area that carries paint, 0..1. */
   progress(): PaintProgress {
     if (!this.ready) return { painted: 0, total: 0, ratio: 0 };
@@ -380,6 +454,48 @@ export class ColoringBook {
     this.view.style.height = "100%";
     this.view.style.left = "0";
     this.view.style.top = "0";
+  }
+
+  /** Keeps the zoomed picture covering its own box, so it cannot be lost. */
+  private clampZoom(): void {
+    const width = this.stage.offsetWidth;
+    const height = this.stage.offsetHeight;
+    const scale = Math.min(MAX_ZOOM, Math.max(1, this.zoom.scale));
+    const minX = width - width * scale;
+    const minY = height - height * scale;
+    this.zoom = {
+      scale,
+      x: Math.min(0, Math.max(minX, this.zoom.x)),
+      y: Math.min(0, Math.max(minY, this.zoom.y)),
+    };
+  }
+
+  private applyZoom(): void {
+    this.clampZoom();
+    const { scale, x, y } = this.zoom;
+    this.stage.style.transformOrigin = "0 0";
+    this.stage.style.transform =
+      scale > 1.001 ? `translate(${x}px, ${y}px) scale(${scale})` : "";
+    this.onZoom?.(this.zoomed);
+  }
+
+  /** Zoom by `factor` keeping the client point (cx, cy) still. */
+  private zoomAround(cx: number, cy: number, nextScale: number, base = this.zoom): void {
+    const box = this.stageOrigin();
+    const px = cx - box.x;
+    const py = cy - box.y;
+    const scale = Math.min(MAX_ZOOM, Math.max(1, nextScale));
+    // Content point under the finger in unscaled stage px.
+    const ux = (px - base.x) / base.scale;
+    const uy = (py - base.y) / base.scale;
+    this.zoom = { scale, x: px - ux * scale, y: py - uy * scale };
+    this.applyZoom();
+  }
+
+  /** Client position of the stage's untransformed top-left corner. */
+  private stageOrigin(): { x: number; y: number } {
+    const rect = this.stage.getBoundingClientRect();
+    return { x: rect.left - this.zoom.x, y: rect.top - this.zoom.y };
   }
 
   private cssScale(): number {
@@ -553,14 +669,30 @@ export class ColoringBook {
   }
 
   private onPointerDown = (event: PointerEvent): void => {
-    if (!this.ready || event.button !== 0 || this.pointerId !== null) return;
+    if (!this.ready) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
     event.preventDefault();
-    this.pointerId = event.pointerId;
+    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     try {
-      this.view.setPointerCapture(event.pointerId);
+      this.surface.setPointerCapture(event.pointerId);
     } catch {
       /* The pointer can already be gone on a quick tap. */
     }
+
+    if (this.pointers.size >= 2) {
+      // Second finger: this is a pinch, never paint. Drop the stroke that the
+      // first finger may have started; it was not committed yet.
+      this.cancelStroke();
+      this.pointerId = null;
+      this.panning = false;
+      this.panStart = null;
+      this.gesturing = true;
+      this.startPinch();
+      return;
+    }
+    if (this.gesturing) return;
+
+    this.pointerId = event.pointerId;
     this.downCss = { x: event.clientX, y: event.clientY };
     if (this.tool === "fill") return;
 
@@ -574,8 +706,38 @@ export class ColoringBook {
   };
 
   private onPointerMove = (event: PointerEvent): void => {
-    if (event.pointerId !== this.pointerId || !this.stroking) return;
+    const known = this.pointers.get(event.pointerId);
+    if (!known) return;
     event.preventDefault();
+    known.x = event.clientX;
+    known.y = event.clientY;
+
+    if (this.gesturing) {
+      if (this.pointers.size >= 2) this.movePinch();
+      return;
+    }
+    if (event.pointerId !== this.pointerId) return;
+
+    if (this.tool === "fill") {
+      // A zoomed picture can be dragged with one finger: a fill is a tap,
+      // so a drag is free for moving the picture around.
+      const moved = Math.hypot(event.clientX - this.downCss.x, event.clientY - this.downCss.y);
+      if (!this.panning && this.zoomed && moved >= TAP_SLOP) {
+        this.panning = true;
+        this.panStart = { x: event.clientX, y: event.clientY, zx: this.zoom.x, zy: this.zoom.y };
+      }
+      if (this.panning && this.panStart) {
+        this.zoom = {
+          scale: this.zoom.scale,
+          x: this.panStart.zx + (event.clientX - this.panStart.x),
+          y: this.panStart.zy + (event.clientY - this.panStart.y),
+        };
+        this.applyZoom();
+      }
+      return;
+    }
+
+    if (!this.stroking) return;
     const points = event.getCoalescedEvents?.() ?? [event];
     for (const point of points) {
       const bitmap = this.toBitmap(point);
@@ -585,11 +747,27 @@ export class ColoringBook {
   };
 
   private onPointerUp = (event: PointerEvent): void => {
+    if (!this.pointers.has(event.pointerId)) return;
+    this.pointers.delete(event.pointerId);
+
+    if (this.gesturing) {
+      if (this.pointers.size >= 2) this.startPinch();
+      else this.pinchStart = null;
+      // Stay in gesture mode until every finger is up: the finger that is
+      // left after a pinch must not fill on release.
+      if (this.pointers.size === 0) this.gesturing = false;
+      return;
+    }
     if (event.pointerId !== this.pointerId) return;
     this.pointerId = null;
+
     if (this.tool === "fill") {
+      const wasPanning = this.panning;
+      this.panning = false;
+      this.panStart = null;
+      if (wasPanning) return;
       const moved = Math.hypot(event.clientX - this.downCss.x, event.clientY - this.downCss.y);
-      if (moved < 14) {
+      if (moved < TAP_SLOP) {
         const point = this.toBitmap(event);
         this.fillAt(point.x, point.y);
       }
@@ -597,4 +775,72 @@ export class ColoringBook {
     }
     this.finishStroke();
   };
+
+  private onPointerCancel = (event: PointerEvent): void => {
+    if (!this.pointers.has(event.pointerId)) return;
+    // The system took the touch (an edge swipe, a call). Keep what was drawn
+    // so far, never fill.
+    if (!this.gesturing && event.pointerId === this.pointerId && this.tool !== "fill") {
+      this.pointers.delete(event.pointerId);
+      this.pointerId = null;
+      this.finishStroke();
+      return;
+    }
+    this.pointers.delete(event.pointerId);
+    if (event.pointerId === this.pointerId) this.pointerId = null;
+    this.panning = false;
+    this.panStart = null;
+    if (this.pointers.size < 2) this.pinchStart = null;
+    if (this.pointers.size === 0) this.gesturing = false;
+  };
+
+  /** Desktop testing: wheel zooms around the cursor. */
+  private onWheel = (event: WheelEvent): void => {
+    if (!this.ready) return;
+    event.preventDefault();
+    const factor = Math.exp(-event.deltaY * 0.0015);
+    this.zoomAround(event.clientX, event.clientY, this.zoom.scale * factor);
+  };
+
+  private startPinch(): void {
+    const [a, b] = [...this.pointers.values()];
+    if (!a || !b) return;
+    this.pinchStart = {
+      dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+      zoom: { ...this.zoom },
+    };
+  }
+
+  private movePinch(): void {
+    const start = this.pinchStart;
+    const [a, b] = [...this.pointers.values()];
+    if (!start || !a || !b) return;
+    const dist = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const scale = Math.min(MAX_ZOOM, Math.max(1, start.zoom.scale * (dist / start.dist)));
+    // Content point under the starting midpoint follows the moving midpoint.
+    const origin = this.stageOrigin();
+    const sx = start.mid.x - origin.x;
+    const sy = start.mid.y - origin.y;
+    const ux = (sx - start.zoom.x) / start.zoom.scale;
+    const uy = (sy - start.zoom.y) / start.zoom.scale;
+    this.zoom = {
+      scale,
+      x: mid.x - origin.x - ux * scale,
+      y: mid.y - origin.y - uy * scale,
+    };
+    this.applyZoom();
+  }
+
+  /** Throws away a stroke that has not been committed to the paint layer. */
+  private cancelStroke(): void {
+    if (!this.stroking) return;
+    this.stroking = false;
+    reset(this.stroke.ctx);
+    this.stroke.ctx.clearRect(0, 0, this.w, this.h);
+    this.last = null;
+    this.hasDab = false;
+    this.render();
+  }
 }

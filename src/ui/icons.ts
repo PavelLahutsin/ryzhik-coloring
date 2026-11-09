@@ -22,7 +22,9 @@ export type IconName =
   | "music"
   | "voice"
   | "chevronLeft"
-  | "chevronRight";
+  | "chevronRight"
+  | "fit"
+  | "close";
 
 const PATHS: Record<IconName, string> = {
   back: '<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>',
@@ -60,6 +62,11 @@ const PATHS: Record<IconName, string> = {
     '<path d="M4.6 6h14.8A1.6 1.6 0 0 1 21 7.6v6.8a1.6 1.6 0 0 1-1.6 1.6H11l-4.4 3.8V16H4.6A1.6 1.6 0 0 1 3 14.4V7.6A1.6 1.6 0 0 1 4.6 6Z"/>',
   chevronLeft: '<path d="M14.5 6 8.5 12l6 6"/>',
   chevronRight: '<path d="M9.5 6l6 6-6 6"/>',
+  /** Four corners pointing out: "the whole picture again". */
+  fit:
+    '<path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/>' +
+    '<rect x="8.5" y="8.5" width="7" height="7" rx="1.6"/>',
+  close: '<path d="m6 6 12 12"/><path d="M18 6 6 18"/>',
 };
 
 export function icon(name: IconName, size = 28, extraClass?: string): SVGSVGElement {
