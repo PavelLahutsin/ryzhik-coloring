@@ -35,8 +35,11 @@ export function renderAlbums(root: HTMLElement): () => void {
         attrs: { type: "button", disabled: !available },
         on: {
           click: () => {
-            if (!available) return;
-            sound.play("tap");
+            if (!available) {
+              sound.play("locked");
+              return;
+            }
+            sound.play("album");
             navigate(`/album/${album.id}`);
           },
         },

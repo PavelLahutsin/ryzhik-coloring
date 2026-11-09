@@ -17,6 +17,38 @@
  */
 import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
+import { register } from "node:module";
+await register(new URL("./ts-loader.mjs", import.meta.url).href, import.meta.url);
+await import("./regions.test.ts");
+
+async function airplaneIsolation(page, size) {
+  await page.goto(`${BASE}#/picture/ryzhik_samoletik`, { waitUntil: "networkidle" });
+  await page.waitForSelector("canvas.sheet");
+  await page.waitForTimeout(1200);
+  await page.getByRole("button", { name: "Заливка", exact: true }).click();
+  const face = [590, 275], grass = [200, 650];
+  const details = [[515, 320], [650, 300], [560, 297], [662, 266], [620, 330], [621, 380], [620, 370]];
+  const flowers = [[53, 540], [56, 515], [28, 528], [80, 532], [30, 555], [52, 566], [143, 559], [117, 572], [167, 576], [142, 584], [119, 597], [162, 600], [140, 607]];
+  const sample = points => page.locator("canvas.sheet").evaluate((canvas, pts) => {
+    const ctx = canvas.getContext("2d");
+    return pts.map(([x, y]) => Array.from(ctx.getImageData(x, y, 1, 1).data));
+  }, points);
+  for (const [name, target, protectedPoints] of [["face", face, details], ["grass", grass, flowers]]) {
+    const points = [target, ...protectedPoints];
+    const before = await sample(points);
+    const box = await page.locator("canvas.sheet").boundingBox();
+    await page.touchscreen.tap(box.x + box.width * target[0] / 1280, box.y + box.height * target[1] / 715);
+    await page.waitForTimeout(100);
+    const after = await sample(points);
+    check(JSON.stringify(after[0]) !== JSON.stringify(before[0]), `${size.name}: ${name} tap must paint`);
+    for (let i = 1; i < points.length; i++) {
+      check(JSON.stringify(after[i]) === JSON.stringify(before[i]), `${size.name}: ${name} leaks into ${points[i]}`);
+    }
+    await page.getByRole("button", { name: "Отменить", exact: true }).click();
+    check(JSON.stringify(await sample(points)) === JSON.stringify(before), `${size.name}: undo ${name}`);
+  }
+  console.log(`${size.name}: airplane face/grass taps preserve eyes, highlights, mouth and flowers`);
+}
 
 const BASE = process.env.SMOKE_BASE ?? "http://127.0.0.1:4173/ryzhik-coloring/";
 const OUT = process.env.SMOKE_DIR ?? ".smoke";
@@ -137,6 +169,7 @@ for (const size of SIZES) {
   check(saved > 0, `${size.name}: рисунок не попал в галерею`);
   await page.screenshot({ path: `${OUT}/${size.name}-5-gallery.png` });
 
+  await airplaneIsolation(page, size);
   await context.close();
 }
 
