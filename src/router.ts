@@ -11,6 +11,7 @@ export type Route =
   | { name: "reward"; pictureId: string; drawingId?: string; newStar?: boolean }
   | { name: "drawings" }
   | { name: "sound" }
+  | { name: "lullabies" }
   | { name: "gate"; next: string }
   | { name: "parent" }
   | { name: "save" }
@@ -49,6 +50,8 @@ export function parseRoute(hash: string): Route {
       return { name: "drawings" };
     case "sound":
       return { name: "sound" };
+    case "lullabies":
+      return { name: "lullabies" };
     case "gate":
       return { name: "gate", next: rest[0] ?? "parent" };
     case "parent":

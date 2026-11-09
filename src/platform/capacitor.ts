@@ -122,7 +122,9 @@ export const capacitorAdapter: PlatformAdapter = {
  */
 export function backAction(routeName: string, canGoBack: boolean): "minimize" | "menu" | "history" {
   if (routeName === "menu") return "minimize";
-  if (routeName === "gate" || routeName === "parent") return "menu";
+  // Gate and the adult screen must not bounce. Lullabies goes to the menu so
+  // its cleanup stops the track and turns sound.silence back off.
+  if (routeName === "gate" || routeName === "parent" || routeName === "lullabies") return "menu";
   return canGoBack ? "history" : "menu";
 }
 

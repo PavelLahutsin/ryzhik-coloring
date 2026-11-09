@@ -75,6 +75,8 @@ let colorPicked = false;
 let painted = false;
 let phrase: AudioBufferSourceNode | null = null;
 let lastOccasional = 0;
+/** Set by screens that must stay silent (lullabies): no effects, no phrases. */
+let silenced = false;
 const clips = new Map<string, AudioBuffer>();
 const raw = new Map<string, ArrayBuffer>();
 const playing = new Set<AudioBufferSourceNode>();
@@ -234,7 +236,7 @@ function playBrush(): void {
 
 /** @param interrupt Replace a phrase that is already speaking. */
 function say(id: PhraseId, then?: () => void, interrupt = false): void {
-  if (!flags.voice || !unlocked) return;
+  if (!flags.voice || !unlocked || silenced) return;
   if (phrase && !interrupt) return;
   const buffer = clips.get(String(id));
   if (!buffer) {
@@ -279,13 +281,16 @@ function maybeSay(id: PhraseId, chance = 0.45): void {
 let wantWelcome = false;
 
 function welcome(): void {
-  if (!wantWelcome || greeted || !flags.voice || !unlocked) return;
-  if (!clips.has("1")) return;
+  // A lullaby screen (or a clip that is not decoded yet) must not use up the
+  // one greeting. greeted flips only after phrase 1 has actually started.
+  if (!wantWelcome || greeted || !flags.voice || !unlocked || silenced) return;
+  if (!clips.has("1") || phrase) return;
+  say(1, () => {
+    if (!silenced && !painted && !colorPicked) maybeSay(2, 0.5);
+  });
+  if (!phrase) return;
   greeted = true;
   wantWelcome = false;
-  say(1, () => {
-    if (!painted && !colorPicked) maybeSay(2, 0.5);
-  });
 }
 
 if (typeof document !== "undefined") {
@@ -328,7 +333,7 @@ export const sound = {
   },
 
   play(event: SoundEvent): void {
-    if (!flags.sounds || !unlocked) return;
+    if (!flags.sounds || !unlocked || silenced) return;
     const c = ensureContext();
     if (!c) return;
     if (c.state === "suspended") void c.resume().catch(() => undefined);
@@ -387,6 +392,18 @@ export const sound = {
   goodbye(): void {
     if (!painted) return;
     say(8, undefined, true);
+  },
+
+  /** Shared AudioContext for long tracks (lullabies). Null before the first unlock. */
+  context(): AudioContext | null {
+    return ctx;
+  },
+
+  /** Silences effects and phrases until released. Also stops anything playing now. */
+  silence(on: boolean): void {
+    silenced = on;
+    if (on) this.stop();
+    else welcome();
   },
 
   stop(): void {
