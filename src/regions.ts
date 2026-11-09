@@ -245,8 +245,251 @@ export function expandUnderLines(core: Uint32Array, alpha: Uint8Array, w: number
   return labels;
 }
 
+/**
+ * A region a child cannot tap: the widest interior is only a few pixels.
+ * Eye whites, the star and flower petals sit above this.
+ */
+const THIN_RADIUS = 3;
+/** Opaque ink. Grey below this is antialias or a faint stroke, not a wall. */
+const SOLID_INK = 200;
+const BORDER_REACH = 4;
+
+function inscribedRadius(labels: Uint32Array, w: number, h: number): Uint16Array {
+  const dist = new Uint16Array(labels.length);
+  for (let i = 0; i < labels.length; i++) if (labels[i]) dist[i] = 65535;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!labels[i]) continue;
+      let d = dist[i] ?? 0;
+      if (x) d = Math.min(d, (dist[i - 1] ?? 0) + 1);
+      if (y) d = Math.min(d, (dist[i - w] ?? 0) + 1);
+      if (x && y) d = Math.min(d, (dist[i - w - 1] ?? 0) + 1);
+      if (x + 1 < w && y) d = Math.min(d, (dist[i - w + 1] ?? 0) + 1);
+      dist[i] = d;
+    }
+  }
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = w - 1; x >= 0; x--) {
+      const i = y * w + x;
+      if (!labels[i]) continue;
+      let d = dist[i] ?? 0;
+      if (x + 1 < w) d = Math.min(d, (dist[i + 1] ?? 0) + 1);
+      if (y + 1 < h) d = Math.min(d, (dist[i + w] ?? 0) + 1);
+      if (x + 1 < w && y + 1 < h) d = Math.min(d, (dist[i + w + 1] ?? 0) + 1);
+      if (x && y + 1 < h) d = Math.min(d, (dist[i + w - 1] ?? 0) + 1);
+      dist[i] = d;
+    }
+  }
+  return dist;
+}
+
+/**
+ * Fold untappable slivers into the neighbour they already touch through grey
+ * or a one-pixel stroke. A solid black line keeps the sliver (an eye, a star,
+ * a petal) as its own region.
+ */
+function absorbThin(labels: Uint32Array, alpha: Uint8Array, w: number, h: number): void {
+  const dist = inscribedRadius(labels, w, h);
+  let maxId = 0;
+  for (let i = 0; i < labels.length; i++) if (labels[i]! > maxId) maxId = labels[i]!;
+  const area = new Uint32Array(maxId + 1);
+  const rad = new Uint16Array(maxId + 1);
+  for (let i = 0; i < labels.length; i++) {
+    const id = labels[i];
+    if (!id) continue;
+    area[id] = (area[id] ?? 0) + 1;
+    const d = dist[i] ?? 0;
+    if (d > (rad[id] ?? 0)) rad[id] = d;
+  }
+  const thin = new Uint8Array(maxId + 1);
+  for (let id = 1; id <= maxId; id++) if ((area[id] ?? 0) > 0 && (rad[id] ?? 0) <= THIN_RADIUS) thin[id] = 1;
+
+  const dirs: readonly number[] = [1, -1, w, -w];
+  for (let pass = 0; pass < 4; pass++) {
+    const touch = new Map<number, Map<number, number>>();
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        const id = labels[i];
+        if (!id || !thin[id]) continue;
+        const interior = x > 0 && labels[i - 1] === id && x + 1 < w && labels[i + 1] === id
+          && y > 0 && labels[i - w] === id && y + 1 < h && labels[i + w] === id;
+        if (interior) continue;
+        for (const step of dirs) {
+          let solids = 0;
+          let other = 0;
+          for (let s = 1; s <= BORDER_REACH; s++) {
+            const xx = step === 1 || step === -1 ? x + (step === 1 ? s : -s) : x;
+            const yy = step === w || step === -w ? y + (step === w ? s : -s) : y;
+            if (xx < 0 || yy < 0 || xx >= w || yy >= h) break;
+            const p = yy * w + xx;
+            if ((alpha[p] ?? 0) >= SOLID_INK) {
+              solids++;
+              if (solids >= 2) break;
+              continue;
+            }
+            const nid = labels[p];
+            if (nid && nid !== id) {
+              other = nid;
+              break;
+            }
+            if (nid === id) break;
+          }
+          if (!other || thin[other]) continue;
+          let row = touch.get(id);
+          if (!row) {
+            row = new Map();
+            touch.set(id, row);
+          }
+          const count = (row.get(other) ?? 0) + 1;
+          row.set(other, count);
+        }
+      }
+    }
+    const target = new Uint32Array(maxId + 1);
+    for (const [id, row] of touch) {
+      let best = 0;
+      let bestSoft = 0;
+      for (const [nid, count] of row) {
+        if (count < 2 || count <= bestSoft) continue;
+        best = nid;
+        bestSoft = count;
+      }
+      if (best) {
+        target[id] = best;
+        thin[id] = 0;
+      }
+    }
+    let moved = false;
+    for (let i = 0; i < labels.length; i++) {
+      const dest = target[labels[i] ?? 0] ?? 0;
+      if (!dest) continue;
+      labels[i] = dest;
+      moved = true;
+    }
+    if (!moved) break;
+  }
+}
+
+/**
+ * White pixels that closing turned into a wall, and grey edges the fringe
+ * pass cannot see. They join the neighbouring colour unless a solid line sits
+ * between them. A tie goes to the smaller region so the sky does not eat the
+ * outline of a character.
+ */
+function claimSoftGaps(labels: Uint32Array, alpha: Uint8Array, w: number, h: number): void {
+  let maxId = 0;
+  for (let i = 0; i < labels.length; i++) if (labels[i]! > maxId) maxId = labels[i]!;
+  const area = new Uint32Array(maxId + 1);
+  for (let i = 0; i < labels.length; i++) {
+    const id = labels[i];
+    if (id) area[id] = (area[id] ?? 0) + 1;
+  }
+  const source = labels.slice();
+  const radius = 4;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      // Only paper and faint pixels. Real ink stays a line, including its grey edge,
+      // which expandUnderLines already handed to the nearer side.
+      if (source[i] || (alpha[i] ?? 0) >= 72) continue;
+      let best = 0;
+      let bestVotes = 0;
+      // Sparse vote list: a gap touches at most a handful of regions.
+      const ids: number[] = [];
+      const votes: number[] = [];
+      for (let dy = -radius; dy <= radius; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= h) continue;
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (!dx && !dy) continue;
+          const xx = x + dx;
+          if (xx < 0 || xx >= w) continue;
+          const id = source[yy * w + xx];
+          if (!id) continue;
+          const steps = Math.max(Math.abs(dx), Math.abs(dy));
+          let solids = 0;
+          let blocked = false;
+          for (let s = 1; s < steps; s++) {
+            const p = (y + Math.round((dy * s) / steps)) * w + x + Math.round((dx * s) / steps);
+            if ((alpha[p] ?? 0) >= SOLID_INK) {
+              solids++;
+              if (solids >= 2) {
+                blocked = true;
+                break;
+              }
+            }
+          }
+          if (blocked) continue;
+          let slot = ids.indexOf(id);
+          if (slot < 0) {
+            slot = ids.length;
+            ids.push(id);
+            votes.push(0);
+          }
+          votes[slot] = (votes[slot] ?? 0) + 1;
+        }
+      }
+      for (let k = 0; k < ids.length; k++) {
+        const count = votes[k] ?? 0;
+        const id = ids[k] ?? 0;
+        const smaller = count === bestVotes && id && (area[id] ?? 0) < (area[best] ?? 0);
+        if (count > bestVotes || smaller) {
+          bestVotes = count;
+          best = id;
+        }
+      }
+      // A tie prefers the smaller region, so the sky does not paint the fox's outline.
+      if (best) labels[i] = best;
+    }
+  }
+  // One more step for paper still touching a colour. Stops at real ink, so it
+  // cannot walk through a line into the next shape.
+  for (let step = 0; step < 2; step++) {
+    const seen = labels.slice();
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (seen[i] || (alpha[i] ?? 0) >= 72) continue;
+        let best = 0;
+        let bestVotes = 0;
+        const ids: number[] = [];
+        const votes: number[] = [];
+        const near = [x ? i - 1 : -1, x + 1 < w ? i + 1 : -1, y ? i - w : -1, y + 1 < h ? i + w : -1];
+        for (const n of near) {
+          if (n < 0) continue;
+          const id = seen[n];
+          if (!id) continue;
+          let slot = ids.indexOf(id);
+          if (slot < 0) {
+            slot = ids.length;
+            ids.push(id);
+            votes.push(0);
+          }
+          votes[slot] = (votes[slot] ?? 0) + 1;
+        }
+        for (let k = 0; k < ids.length; k++) {
+          const count = votes[k] ?? 0;
+          const id = ids[k] ?? 0;
+          const smaller = count === bestVotes && id && (area[id] ?? 0) < (area[best] ?? 0);
+          if (count > bestVotes || smaller) {
+            bestVotes = count;
+            best = id;
+          }
+        }
+        if (best) labels[i] = best;
+      }
+    }
+  }
+}
+
 export function buildRegionLabels(alpha: Uint8Array, w: number, h: number, options: RegionOptions = {}): Uint32Array {
-  return expandUnderLines(labelRegions(buildLineMask(alpha, w, h, options), w, h), alpha, w, h, options.fringeRadius ?? REGION_OPTIONS.fringeRadius);
+  const core = labelRegions(buildLineMask(alpha, w, h, options), w, h);
+  absorbThin(core, alpha, w, h);
+  const painted = expandUnderLines(core, alpha, w, h, options.fringeRadius ?? REGION_OPTIONS.fringeRadius);
+  claimSoftGaps(painted, alpha, w, h);
+  return painted;
 }
 
 export type RegionSpot = { area: number; x: number; y: number };
