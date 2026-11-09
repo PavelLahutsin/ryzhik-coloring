@@ -23,6 +23,8 @@ export type Settings = {
   analytics: boolean;
   /** Parent switch "Только заливка": S4 shows the bucket and the palette only. */
   fillOnly: boolean;
+  /** Lullaby sleep timer in minutes, one of LULLABY_MINUTES. */
+  lullabyMinutes: LullabyMinutes;
 };
 
 export type PictureState = {
@@ -84,6 +86,9 @@ export const MAX_DRAFT_AGE_DAYS = 30;
 
 export const BRUSH_SIZES = [8, 16, 26] as const;
 
+export const LULLABY_MINUTES = [10, 20, 30] as const;
+export type LullabyMinutes = (typeof LULLABY_MINUTES)[number];
+
 export const DEFAULT_SETTINGS: Settings = {
   magnet: true,
   magnetLocked: false,
@@ -93,6 +98,7 @@ export const DEFAULT_SETTINGS: Settings = {
   voice: true,
   analytics: false,
   fillOnly: false,
+  lullabyMinutes: 20,
 };
 
 const EMPTY_PROGRESS: Progress = { stars: 0, pictures: {} };
