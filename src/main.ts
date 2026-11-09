@@ -15,6 +15,7 @@ import { renderAlbums } from "./screens/albums";
 import { isParentUnlocked, renderGate } from "./screens/gate";
 import { mountPicture } from "./screens/coloring";
 import { renderDrawings } from "./screens/drawings";
+import { renderLullabies } from "./screens/lullabies";
 import { renderMenu } from "./screens/menu";
 import { renderMissing } from "./screens/missing";
 import { renderParent } from "./screens/parent";
@@ -57,6 +58,9 @@ function render(route: Route): void {
       break;
     case "sound":
       cleanup = renderSound(root!);
+      break;
+    case "lullabies":
+      cleanup = renderLullabies(root!);
       break;
     case "gate":
       cleanup = renderGate(root!, route.next);

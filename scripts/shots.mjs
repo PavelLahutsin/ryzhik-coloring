@@ -100,6 +100,7 @@ await shot("390-7-gallery", phone, async (p) => {
   await p.waitForTimeout(800);
   await p.getByRole("button", { name: "В мои рисунки" }).click();
 });
+await shot("10-lullabies", phone, (p) => p.getByRole("button", { name: "Колыбельные" }).click());
 await shot("8-sound", phone, (p) => p.getByRole("button", { name: "Звук" }).click());
 await shot("9-gate", phone, (p) => p.getByRole("button", { name: "Родителям" }).click());
 await shot("11-parent", phone, async (p) => {

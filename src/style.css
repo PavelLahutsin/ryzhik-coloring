@@ -1712,3 +1712,242 @@ p {
     align-items: center;
   }
 }
+
+/* --- lullabies: «Колыбельные» с режимом сна ------------------------------- */
+
+.tile--lullaby {
+  flex-direction: row;
+  justify-content: flex-start;
+  min-height: var(--tap-lg);
+  padding-inline: 22px;
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+.tile--lullaby .tile__label {
+  text-align: left;
+}
+
+/* Dark sleep mode: deep navy, dimmed ink, no motion, no flashing. */
+body[data-route="lullabies"] {
+  background: #0d1530;
+  background-image: none;
+}
+
+.screen--lullaby {
+  color: #b9c2dd;
+  background: #0d1530;
+  filter: brightness(0.82);
+  min-height: 100dvh;
+}
+
+.screen--lullaby .topbar__btn {
+  color: #b9c2dd;
+  background: #162143;
+  border-color: #26335e;
+  box-shadow: none;
+}
+
+.screen--lullaby .topbar__title,
+.screen--lullaby .lull-now__title {
+  color: #c9d3ee;
+}
+
+.screen--lullaby .lull-section,
+.screen--lullaby .lull-note,
+.screen--lullaby .lull-timer__left,
+.screen--lullaby .lull-now__state,
+.screen--lullaby .lull-card__state,
+.screen--lullaby .empty-state__text {
+  color: #8f9bbd;
+}
+
+.lull {
+  display: grid;
+  gap: 18px;
+}
+
+.lull-hint {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: #162143;
+  border: 2px solid #34437a;
+  border-radius: var(--radius-lg);
+}
+
+.lull-hint[hidden] {
+  display: none;
+}
+
+.lull-hint__text {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.lull-hint__btn {
+  min-height: var(--tap);
+  color: #c9d3ee;
+  background: #1d2a52;
+  border-color: #34437a;
+}
+
+.lull-now {
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.lull-now__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 6vw, 2rem);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.lull-now__state {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.lull-controls {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: var(--gap);
+}
+
+.lull-play,
+.lull-next {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--tap-lg);
+  padding: 12px;
+  font-family: var(--font-ui);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #c9d3ee;
+  cursor: pointer;
+  background: #1d2a52;
+  border: 2px solid #34437a;
+  border-radius: var(--radius-lg);
+}
+
+.lull-play {
+  background: #24406e;
+  border-color: #3d5a94;
+}
+
+.lull-play:active,
+.lull-next:active {
+  opacity: 0.85;
+}
+
+.lull-section {
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.lull-timer {
+  display: grid;
+  gap: 10px;
+}
+
+.lull-timer__row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gap);
+}
+
+.lull-timer__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  color: #b9c2dd;
+  cursor: pointer;
+  background: #162143;
+  border: 2px solid #26335e;
+  border-radius: var(--radius-md);
+}
+
+.lull-timer__btn.is-on {
+  color: #0d1530;
+  background: #c9d3ee;
+  border-color: #c9d3ee;
+}
+
+.lull-timer__num {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.lull-timer__unit {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.lull-timer__left {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.lull-list {
+  display: grid;
+  gap: var(--gap);
+}
+
+.lull-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--tap-lg);
+  padding: 12px 16px;
+  font-family: var(--font-ui);
+  color: #c9d3ee;
+  text-align: left;
+  cursor: pointer;
+  background: #162143;
+  border: 2px solid #26335e;
+  border-radius: var(--radius-lg);
+}
+
+.lull-card.is-current {
+  border-color: #6f86c4;
+}
+
+.lull-card__num {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  font-size: 1.2rem;
+  font-weight: 800;
+  background: #1d2a52;
+  border-radius: 999px;
+}
+
+.lull-card__title {
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.lull-card__state {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.lull-note {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.screen--lullaby .empty-state {
+  margin-top: 48px;
+}

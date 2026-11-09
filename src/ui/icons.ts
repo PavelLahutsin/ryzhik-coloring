@@ -24,7 +24,10 @@ export type IconName =
   | "chevronLeft"
   | "chevronRight"
   | "fit"
-  | "close";
+  | "close"
+  | "play"
+  | "pause"
+  | "moon";
 
 const PATHS: Record<IconName, string> = {
   back: '<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>',
@@ -67,6 +70,10 @@ const PATHS: Record<IconName, string> = {
     '<path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/>' +
     '<rect x="8.5" y="8.5" width="7" height="7" rx="1.6"/>',
   close: '<path d="m6 6 12 12"/><path d="M18 6 6 18"/>',
+  play: '<path d="M8 5.6v12.8a1 1 0 0 0 1.5.9l10.4-6.4a1 1 0 0 0 0-1.8L9.5 4.7A1 1 0 0 0 8 5.6Z"/>',
+  pause: '<rect x="6.5" y="5" width="4" height="14" rx="1.4"/><rect x="13.5" y="5" width="4" height="14" rx="1.4"/>',
+  /** Crescent moon: the lullaby entrance on the menu. */
+  moon: '<path d="M19.5 14.6A8 8 0 0 1 9.4 4.5a8 8 0 1 0 10.1 10.1Z"/>',
 };
 
 export function icon(name: IconName, size = 28, extraClass?: string): SVGSVGElement {

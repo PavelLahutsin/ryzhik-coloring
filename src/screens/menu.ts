@@ -88,6 +88,18 @@ export function renderMenu(root: HTMLElement): () => void {
           el("span", { class: "tile__label", text: "Мои рисунки" }),
         ],
       ),
+      el(
+        "button",
+        {
+          class: "tile tile--lullaby",
+          attrs: { type: "button", "aria-label": "Колыбельные" },
+          on: { click: () => go("/lullabies") },
+        },
+        [
+          el("span", { class: "tile__icon", attrs: { "aria-hidden": "true" } }, [icon("moon", 40)]),
+          el("span", { class: "tile__label", text: "Колыбельные" }),
+        ],
+      ),
       el("div", { class: "menu__row" }, [soundBtn, starBtn]),
     ]),
     el(
