@@ -299,6 +299,13 @@ if (typeof document !== "undefined") {
     if (document.visibilityState === "hidden") sound.stop();
   });
   window.addEventListener("pagehide", () => sound.stop());
+  window.addEventListener("ryzhik:background", () => {
+    sound.stop();
+    document.querySelectorAll("audio").forEach((node) => {
+      if (node instanceof HTMLAudioElement) node.pause();
+    });
+    if (ctx && ctx.state === "running") void ctx.suspend().catch(() => undefined);
+  });
 }
 
 export const sound = {

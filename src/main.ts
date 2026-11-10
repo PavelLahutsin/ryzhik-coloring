@@ -14,7 +14,7 @@ import { renderAlbum } from "./screens/album";
 import { renderAlbums } from "./screens/albums";
 import { isParentUnlocked, renderGate } from "./screens/gate";
 import { mountPicture } from "./screens/coloring";
-import { renderDrawings } from "./screens/drawings";
+import { renderDrawings, renderExport } from "./screens/drawings";
 import { renderLullabies } from "./screens/lullabies";
 import { renderMenu } from "./screens/menu";
 import { renderMissing } from "./screens/missing";
@@ -68,10 +68,18 @@ function render(route: Route): void {
     case "parent":
       // The adult section is reachable only through S8 in this session.
       if (!isParentUnlocked()) {
-        navigate("/gate/parent");
+        navigate("/gate/parent", { replace: true });
         return;
       }
       cleanup = renderParent(root!);
+      break;
+    case "save":
+    case "share":
+      if (!isParentUnlocked()) {
+        navigate(`/gate/${route.name}`, { replace: true });
+        return;
+      }
+      cleanup = renderExport(root!, route.name);
       break;
     default:
       cleanup = renderMissing(root!);

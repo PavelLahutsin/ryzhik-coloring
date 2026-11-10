@@ -353,6 +353,8 @@ export function renderLullabies(root: HTMLElement): () => void {
   sound.silence(true);
   document.addEventListener("visibilitychange", onVisibility);
   window.addEventListener("pagehide", onPageHide);
+  // Android often skips visibilitychange when the app is backgrounded.
+  window.addEventListener("ryzhik:background", onPageHide);
 
   const onEnded = (): void => {
     if (disposed || !playing) return;
@@ -392,6 +394,7 @@ export function renderLullabies(root: HTMLElement): () => void {
       graph = null;
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("ryzhik:background", onPageHide);
       // Back, home, and any other route all come through this cleanup.
       sound.silence(false);
     }
