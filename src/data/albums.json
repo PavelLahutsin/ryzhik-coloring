@@ -15,6 +15,22 @@
         {
           "id": "ryzhik_samoletik",
           "title": "Рыжик и самолётик"
+        },
+        {
+          "id": "ryzhik_sport",
+          "title": "Рыжик-спортсмен"
+        },
+        {
+          "id": "zayka",
+          "title": "Зайка"
+        },
+        {
+          "id": "ezhik_dozhd",
+          "title": "Ёжик под дождём"
+        },
+        {
+          "id": "ryzhik_kupaetsya",
+          "title": "Рыжик купается"
         }
       ]
     },
