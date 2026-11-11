@@ -1,0 +1,53 @@
+{
+  "width": 1280,
+  "height": 720,
+  "regionCount": 38,
+  "tinyRegions": [
+    {
+      "area": 14,
+      "x": 806,
+      "y": 265
+    },
+    {
+      "area": 29,
+      "x": 780,
+      "y": 504
+    },
+    {
+      "area": 63,
+      "x": 505,
+      "y": 513
+    },
+    {
+      "area": 40,
+      "x": 791,
+      "y": 512
+    },
+    {
+      "area": 45,
+      "x": 510,
+      "y": 553
+    },
+    {
+      "area": 30,
+      "x": 556,
+      "y": 553
+    },
+    {
+      "area": 154,
+      "x": 772,
+      "y": 641
+    }
+  ],
+  "suspectedLeaks": [],
+  "options": {
+    "inkThreshold": 72,
+    "closingRadius": 2,
+    "fringeRadius": 2
+  },
+  "before": {
+    "regionCount": 37,
+    "neckCount": 1
+  },
+  "neckCount": 0
+}

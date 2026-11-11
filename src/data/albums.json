@@ -19,6 +19,22 @@
         {
           "id": "ryzhik_mostik",
           "title": "Прыжок через мостик"
+        },
+        {
+          "id": "ryzhik_sharik",
+          "title": "Рыжик с шариком"
+        },
+        {
+          "id": "ryzhik_plyazh",
+          "title": "Рыжик на пляже"
+        },
+        {
+          "id": "ryzhik_spit",
+          "title": "Рыжик спит"
+        },
+        {
+          "id": "ryzhik_tort",
+          "title": "День рождения Рыжика"
         }
       ]
     },
@@ -36,6 +52,14 @@
         {
           "id": "mama",
           "title": "Мама"
+        },
+        {
+          "id": "mama_yabloki",
+          "title": "Мама собирает яблоки"
+        },
+        {
+          "id": "papa_rybalka",
+          "title": "Папа на рыбалке"
         }
       ]
     },
