@@ -696,7 +696,7 @@ p {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
-  gap: var(--gap);
+  gap: 8px;
 }
 
 .dock__cap {
@@ -735,9 +735,12 @@ p {
 }
 
 .tool__label {
-  font-size: 0.78rem;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.68rem;
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.15;
+  text-align: center;
 }
 
 .tool__bucket {
@@ -790,29 +793,28 @@ p {
   background: var(--orange-tint);
 }
 
+/* Size lives in the dock, always visible — not a hidden popover. */
 .sizes {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  z-index: 4;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(64px, 1fr));
   gap: 8px;
-  padding: 8px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
-  transform: translateX(-50%);
+  align-items: stretch;
 }
 
 .sizes__btn {
   display: grid;
   place-items: center;
-  width: 56px;
-  height: 56px;
+  width: auto;
+  min-width: 64px;
+  min-height: var(--tap);
   cursor: pointer;
-  background: var(--surface-2);
+  background: var(--surface);
   border: 2px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
+}
+
+.sizes__btn:active {
+  transform: scale(0.96);
 }
 
 .sizes__btn[aria-pressed="true"] {
@@ -826,6 +828,20 @@ p {
   max-height: 34px;
   background: var(--ink);
   border-radius: 999px;
+}
+
+.sizes__clear {
+  min-width: 64px;
+}
+
+/* The hold ring is a circle; a text label under it gets cut off in this row.
+   The icon and the ring are enough — a short tap still shows the toast. */
+.sizes__clear .tool__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
 }
 
 .palette {
@@ -1470,8 +1486,15 @@ p {
   }
 
   .sizes {
-    top: calc(100% + 6px);
-    bottom: auto;
+    gap: 8px;
+  }
+
+  .sizes__btn {
+    min-height: 64px;
+  }
+
+  .tool__label {
+    font-size: 0.72rem;
   }
 }
 
