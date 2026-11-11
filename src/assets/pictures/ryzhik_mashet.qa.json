@@ -1,32 +1,57 @@
 {
   "width": 1280,
   "height": 720,
-  "regionCount": 35,
+  "regionCount": 51,
   "tinyRegions": [
     {
-      "area": 1,
-      "x": 648,
-      "y": 248
+      "area": 152,
+      "x": 585,
+      "y": 275
     },
     {
-      "area": 143,
-      "x": 672,
-      "y": 254
+      "area": 40,
+      "x": 843,
+      "y": 307
     },
     {
-      "area": 149,
-      "x": 554,
-      "y": 272
+      "area": 113,
+      "x": 871,
+      "y": 310
     },
     {
-      "area": 49,
-      "x": 606,
-      "y": 304
+      "area": 52,
+      "x": 864,
+      "y": 317
     },
     {
-      "area": 77,
-      "x": 596,
-      "y": 354
+      "area": 129,
+      "x": 856,
+      "y": 327
+    },
+    {
+      "area": 59,
+      "x": 878,
+      "y": 334
+    },
+    {
+      "area": 22,
+      "x": 870,
+      "y": 342
+    },
+    {
+      "area": 55,
+      "x": 630,
+      "y": 356
+    },
+    {
+      "area": 133,
+      "x": 824,
+      "y": 572
+    },
+    {
+      "area": 25,
+      "x": 836,
+      "y": 587
     }
   ],
   "suspectedLeaks": [],
@@ -36,8 +61,8 @@
     "fringeRadius": 2
   },
   "before": {
-    "regionCount": 32,
-    "neckCount": 2
+    "regionCount": 50,
+    "neckCount": 0
   },
   "neckCount": 0
 }
