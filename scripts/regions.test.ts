@@ -52,7 +52,7 @@ for (const gap of [1, 2, 3]) for (const transpose of [false, true]) {
   assert.equal(expandUnderLines(core, ink, w, h)[4 * w + 6], 0, 'synthetic closure is not claimed');
 }
 // Semantically selected points on the actual 1280x715 artwork, not generated IDs.
-const png = PNG.sync.read(new Resvg(readFileSync(new URL('../src/assets/pictures/ryzhik_samoletik.svg', import.meta.url)), { fitTo: { mode: 'width', value: 1280 } }).render().asPng());
+const png = PNG.sync.read(new Resvg(readFileSync(new URL('./fixtures/ryzhik_samoletik.svg', import.meta.url)), { fitTo: { mode: 'width', value: 1280 } }).render().asPng());
 const alpha = Uint8Array.from({ length: png.width * png.height }, (_, i) => Math.round((255 - png.data[i * 4]) * png.data[i * 4 + 3] / 255));
 const labels = buildRegionLabels(alpha, png.width, png.height);
 const face = [590, 275], grass = [200, 650];

@@ -5,32 +5,20 @@
       "id": "friends",
       "title": "Рыжик и его друзья",
       "emoji": "",
-      "cover": "shot11",
+      "cover": "ryzhik_mashet",
       "available": true,
       "pictures": [
         {
-          "id": "shot11",
-          "title": "Рыжик и Мишка"
+          "id": "ryzhik_stoit",
+          "title": "Рыжик"
         },
         {
-          "id": "ryzhik_samoletik",
-          "title": "Рыжик и самолётик"
+          "id": "ryzhik_mashet",
+          "title": "Рыжик машет лапкой"
         },
         {
-          "id": "ryzhik_sport",
-          "title": "Рыжик-спортсмен"
-        },
-        {
-          "id": "zayka",
-          "title": "Зайка"
-        },
-        {
-          "id": "ezhik_dozhd",
-          "title": "Ёжик под дождём"
-        },
-        {
-          "id": "ryzhik_kupaetsya",
-          "title": "Рыжик купается"
+          "id": "ryzhik_mostik",
+          "title": "Прыжок через мостик"
         }
       ]
     },
@@ -38,12 +26,16 @@
       "id": "family",
       "title": "Рыжик и его семья",
       "emoji": "",
-      "cover": "druzhnaya_semya",
+      "cover": "mama",
       "available": true,
       "pictures": [
         {
-          "id": "druzhnaya_semya",
-          "title": "Дружная семья"
+          "id": "papa",
+          "title": "Папа"
+        },
+        {
+          "id": "mama",
+          "title": "Мама"
         }
       ]
     },

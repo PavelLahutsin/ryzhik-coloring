@@ -1,22 +1,12 @@
 {
   "width": 1280,
   "height": 720,
-  "regionCount": 28,
+  "regionCount": 19,
   "tinyRegions": [
     {
-      "area": 46,
-      "x": 769,
-      "y": 320
-    },
-    {
-      "area": 70,
-      "x": 661,
-      "y": 322
-    },
-    {
       "area": 1,
-      "x": 437,
-      "y": 398
+      "x": 632,
+      "y": 263
     }
   ],
   "suspectedLeaks": [],
@@ -26,8 +16,8 @@
     "fringeRadius": 2
   },
   "before": {
-    "regionCount": 27,
-    "neckCount": 1
+    "regionCount": 19,
+    "neckCount": 0
   },
   "neckCount": 0
 }
