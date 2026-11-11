@@ -35,6 +35,22 @@
         {
           "id": "ryzhik_tort",
           "title": "День рождения Рыжика"
+        },
+        {
+          "id": "ryzhik_zmey",
+          "title": "Рыжик с воздушным змеем"
+        },
+        {
+          "id": "ryzhik_snegovik",
+          "title": "Рыжик лепит снеговика"
+        },
+        {
+          "id": "ryzhik_dozhd",
+          "title": "Рыжик под зонтиком"
+        },
+        {
+          "id": "ryzhik_kacheli",
+          "title": "Рыжик на качелях"
         }
       ]
     },
@@ -60,6 +76,14 @@
         {
           "id": "papa_rybalka",
           "title": "Папа на рыбалке"
+        },
+        {
+          "id": "ryzhik_mama_obnimka",
+          "title": "Рыжик обнимает маму"
+        },
+        {
+          "id": "mama_kniga",
+          "title": "Мама читает Рыжику"
         }
       ]
     },
