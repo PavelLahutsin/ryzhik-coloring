@@ -1,6 +1,6 @@
 import { REGION_RASTER_WIDTH, buildRegionLabels, nearestLabel, paintLabel } from "./regions";
 
-export type Tool = "fill" | "pencil" | "brush" | "marker" | "eraser";
+export type Tool = "fill" | "pencil" | "brush" | "marker" | "crayon" | "eraser";
 
 const TARGET_WIDTH = REGION_RASTER_WIDTH;
 /** Design doc: undo/redo stack of 30 steps. */
@@ -39,6 +39,119 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 function hexToRgb(hex: string): Rgb {
   const n = Number.parseInt(hex.slice(1), 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+
+function hash2(x: number, y: number): number {
+  let n = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263);
+  n = Math.imul(n ^ (n >>> 13), 1274126177);
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+}
+
+function valueNoise(x: number, y: number, cell: number): number {
+  const gx = Math.floor(x / cell);
+  const gy = Math.floor(y / cell);
+  const fx = x / cell - gx;
+  const fy = y / cell - gy;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const a = hash2(gx, gy);
+  const b = hash2(gx + 1, gy);
+  const c = hash2(gx, gy + 1);
+  const d = hash2(gx + 1, gy + 1);
+  return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+}
+
+/** World-anchored paper grain, used once per stroke so overlaps stay even. */
+function makeGrainTile(kind: "pencil" | "crayon", size = 256): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas");
+  const image = ctx.createImageData(size, size);
+  const data = image.data;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const fine = hash2(x, y);
+      let alpha = 255;
+      if (kind === "pencil") {
+        // Fine graphite speckles, mostly covered, a few paper holes.
+        if (fine > 0.82) alpha = 0;
+        else alpha = 170 + Math.floor(fine * 70);
+      } else {
+        const coarse = valueNoise(x, y, 18);
+        const mid = valueNoise(x + 40, y + 17, 8);
+        // Paper tooth: bigger gaps plus a little fine dust.
+        if (coarse < 0.2 || mid < 0.16 || fine > 0.94) alpha = 0;
+        else alpha = 170 + Math.floor(coarse * 85);
+      }
+      data[i] = 255;
+      data[i + 1] = 255;
+      data[i + 2] = 255;
+      data[i + 3] = alpha;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  return canvas;
+}
+
+/** Coverage stamp: ragged pencil tip or lumpy crayon tip. */
+function makeTipStamp(kind: "pencil" | "crayon", n = 96): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = n;
+  canvas.height = n;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas");
+  const image = ctx.createImageData(n, n);
+  const data = image.data;
+  const cx = (n - 1) / 2;
+  const cy = (n - 1) / 2;
+  const r = n / 2 - 1;
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const dx = x - cx;
+      const dy = y - cy;
+      const d = Math.hypot(dx, dy);
+      let alpha = 0;
+      if (kind === "pencil") {
+        const jagged = 0.72 + hash2(x, y) * 0.28;
+        const limit = r * jagged;
+        if (d <= limit) {
+          const t = d / limit;
+          alpha = t < 0.42 ? 230 : Math.round(230 * (1 - (t - 0.42) / 0.58));
+          if (t > 0.58 && hash2(x + 19, y + 7) > 0.45) alpha = Math.round(alpha * 0.2);
+        }
+      } else {
+        const lump = 0.8 + valueNoise(x, y, 12) * 0.2;
+        const limit = r * lump;
+        if (d <= limit) {
+          const t = d / limit;
+          alpha = t < 0.68 ? 255 : Math.round(255 * (1 - (t - 0.68) / 0.32));
+          if (t > 0.58 && hash2(x + 3, y + 11) > 0.78) alpha = 0;
+        }
+      }
+      const i = (y * n + x) * 4;
+      data[i] = 255;
+      data[i + 1] = 255;
+      data[i + 2] = 255;
+      data[i + 3] = alpha;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  return canvas;
+}
+
+const GRAIN: Partial<Record<Tool, HTMLCanvasElement>> = {};
+const TIPS: Partial<Record<Tool, HTMLCanvasElement>> = {};
+
+function grainTile(kind: "pencil" | "crayon"): HTMLCanvasElement {
+  return (GRAIN[kind] ??= makeGrainTile(kind));
+}
+
+function tipStamp(kind: "pencil" | "crayon"): HTMLCanvasElement {
+  return (TIPS[kind] ??= makeTipStamp(kind));
 }
 
 function reset(ctx: CanvasRenderingContext2D): void {
@@ -554,6 +667,14 @@ export class ColoringBook {
     return Math.max(1, (this.sizeCss / 2) * this.cssScale());
   }
 
+  /** Pencil is thinner, crayon a little chunkier, than the shared size setting. */
+  private toolRadius(): number {
+    const base = this.bitmapRadius();
+    if (this.tool === "pencil") return Math.max(1, base * 0.46);
+    if (this.tool === "crayon") return Math.max(1, base * 1.12);
+    return base;
+  }
+
   private fingerRadius(): number {
     return Math.max(this.bitmapRadius(), 22 * this.cssScale());
   }
@@ -569,7 +690,7 @@ export class ColoringBook {
     flat.clearRect(0, 0, this.w, this.h);
     flat.drawImage(this.paint.canvas, 0, 0);
     if (this.stroking) {
-      const stamp = this.maskedStroke();
+      const stamp = this.composeStroke();
       if (this.tool === "eraser") {
         flat.globalCompositeOperation = "destination-out";
         flat.drawImage(stamp, 0, 0);
@@ -595,6 +716,31 @@ export class ColoringBook {
     if (this.clipOn && this.clipCanvas) {
       ctx.globalCompositeOperation = "destination-in";
       ctx.drawImage(this.clipCanvas, 0, 0);
+    }
+    return this.scratch.canvas;
+  }
+
+  /**
+   * Region-clipped stroke, with pencil/crayon grain applied once over the
+   * whole coverage so overlapping dabs do not pile into dark blobs.
+   */
+  private composeStroke(): HTMLCanvasElement {
+    this.maskedStroke();
+    if (this.tool === "pencil" || this.tool === "crayon") {
+      const ctx = this.scratch.ctx;
+      ctx.globalCompositeOperation = "destination-in";
+      const pattern = ctx.createPattern(grainTile(this.tool), "repeat");
+      if (pattern) {
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, this.w, this.h);
+      }
+      ctx.globalCompositeOperation = "source-in";
+      const { r, g, b } = this.rgb;
+      // Pencil is lighter than a solid marker; crayon is almost opaque,
+      // with the paper gaps coming from the grain mask.
+      const alpha = this.tool === "pencil" ? 0.6 : 0.96;
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+      ctx.fillRect(0, 0, this.w, this.h);
     }
     return this.scratch.canvas;
   }
@@ -626,29 +772,44 @@ export class ColoringBook {
   }
 
   private dab(x: number, y: number): void {
-    const radius = this.bitmapRadius();
+    const radius = this.toolRadius();
     const ctx = this.stroke.ctx;
     reset(ctx);
     const { r, g, b } = this.rgb;
-    if (this.tool === "brush") {
+    if (this.tool === "pencil" || this.tool === "crayon") {
+      // Coverage only (white). Colour and grain are applied once in composeStroke.
+      const size = Math.max(2, radius * 2);
+      ctx.drawImage(tipStamp(this.tool), x - radius, y - radius, size, size);
+    } else if (this.tool === "marker") {
+      // Smooth felt tip: solid core, a very short soft edge, even coverage.
+      const gradient = ctx.createRadialGradient(x, y, radius * 0.82, x, y, radius);
+      gradient.addColorStop(0, `rgba(${r},${g},${b},1)`);
+      gradient.addColorStop(0.86, `rgba(${r},${g},${b},1)`);
+      gradient.addColorStop(1, `rgba(${r},${g},${b},0)`);
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (this.tool === "brush") {
       const gradient = ctx.createRadialGradient(x, y, radius * 0.1, x, y, radius);
       gradient.addColorStop(0, `rgba(${r},${g},${b},1)`);
       gradient.addColorStop(0.55, `rgba(${r},${g},${b},0.9)`);
       gradient.addColorStop(1, `rgba(${r},${g},${b},0)`);
       ctx.fillStyle = gradient;
-    } else if (this.tool === "marker") {
-      const gradient = ctx.createRadialGradient(x, y, radius * 0.72, x, y, radius);
-      gradient.addColorStop(0, `rgba(${r},${g},${b},1)`);
-      gradient.addColorStop(1, `rgba(${r},${g},${b},0)`);
-      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
     } else if (this.tool === "eraser") {
       ctx.fillStyle = "#000000";
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
     } else {
       ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
     }
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fill();
     this.hasDab = true;
     if (this.tool !== "eraser") this.cue("stroke");
   }
@@ -662,7 +823,9 @@ export class ColoringBook {
     const dx = x - this.last.x;
     const dy = y - this.last.y;
     const distance = Math.hypot(dx, dy);
-    const step = Math.max(1, this.bitmapRadius() * 0.22);
+    const spacing =
+      this.tool === "crayon" ? 0.34 : this.tool === "pencil" ? 0.2 : 0.22;
+    const step = Math.max(1, this.toolRadius() * spacing);
     const count = Math.ceil(distance / step);
     for (let i = 1; i <= count; i++) {
       this.dab(this.last.x + (dx * i) / count, this.last.y + (dy * i) / count);
@@ -696,7 +859,7 @@ export class ColoringBook {
     this.stroking = false;
     if (this.hasDab) {
       this.pushUndo();
-      const stamp = this.maskedStroke();
+      const stamp = this.composeStroke();
       const ctx = this.paint.ctx;
       reset(ctx);
       if (this.tool === "eraser") {

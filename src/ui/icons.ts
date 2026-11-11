@@ -1,6 +1,6 @@
 /**
  * Icon set: 24×24 grid, rounded caps, thick strokes. Tools are drawn as
- * objects (bucket, brush, eraser) because a 4-year-old recognises a thing,
+ * objects (bucket, marker, pencil, crayon, eraser) because a 4-year-old recognises a thing,
  * not a metaphor.
  */
 export type IconName =
@@ -11,6 +11,9 @@ export type IconName =
   | "check"
   | "bucket"
   | "brush"
+  | "marker"
+  | "pencil"
+  | "crayon"
   | "eraser"
   | "clear"
   | "magnet"
@@ -42,6 +45,20 @@ const PATHS: Record<IconName, string> = {
   brush:
     '<path d="M4.4 19.6c2.5.6 4.6-.6 5.7-2.4l7.6-8.1-3.1-3.1-8.1 7.6c-1.8 1.1-3 3.2-2.4 5.7Z"/>' +
     '<path d="M14.6 5.9 18.1 2.4"/>',
+  marker:
+    '<path d="M7.2 20.6 15.4 8.8l3 3.2-8.2 11.8a1.8 1.8 0 0 1-2.6.2l-0.6-0.7a1.8 1.8 0 0 1 .2-2.7Z"/>' +
+    '<path d="M15.4 8.8 18.2 4.6l3.2 2.2-2.6 4.2"/>' +
+    '<path d="M8.6 18.4 17 10.6"/>',
+  pencil:
+    '<path d="M4.4 19.6 14.6 9.4l2.8 2.8-10.2 10.2-3 .2.2-3Z"/>' +
+    '<path d="M14.6 9.4 17.8 6.2l2.8 2.8-3.2 3.2"/>' +
+    '<path d="M17.8 6.2 20.2 3.8 22 5.6 19.6 8"/>' +
+    '<path d="M6.2 17.8 8.8 20.4"/>',
+  crayon:
+    '<path d="M6.2 19.6 13.4 12.4l3.4 3.4-7.2 7.2a1.6 1.6 0 0 1-2.3 0L6.2 19.6z"/>' +
+    '<path d="M13.4 12.4 16.8 9l3.4 3.4-3.4 3.4"/>' +
+    '<path d="M16.8 9 19 6.8 21.2 9 19 11.2"/>' +
+    '<path d="M12.2 13.6 15.6 17"/>',
   eraser:
     '<path d="M9 20h11"/>' +
     '<path d="M6.6 13.6 13.2 7a1.8 1.8 0 0 1 2.6 0l2.6 2.6a1.8 1.8 0 0 1 0 2.6L14 18.8a1.8 1.8 0 0 1-2.6 0l-4.8-2.6a1.8 1.8 0 0 1 0-2.6Z"/>',

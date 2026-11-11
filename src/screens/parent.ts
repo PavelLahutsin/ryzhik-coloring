@@ -57,7 +57,7 @@ export function renderParent(root: HTMLElement): () => void {
     drawing.append(
       row("Магнит («не выходить за линии»)", toggle(settings.magnet, (next) => void patch({ magnet: next }))),
       row("Запереть магнит", toggle(settings.magnetLocked, (next) => void patch({ magnetLocked: next }))),
-      row("Только заливка (без кисти и ластика)", toggle(settings.fillOnly, (next) => void patch({ fillOnly: next }))),
+      row("Только заливка (без кистей и ластика)", toggle(settings.fillOnly, (next) => void patch({ fillOnly: next }))),
       row(
         "Размер кисти по умолчанию",
         el("div", { class: "adult__choices" }, [

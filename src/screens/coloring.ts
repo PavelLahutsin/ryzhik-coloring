@@ -6,7 +6,7 @@ import { sound } from "../sound";
 import { BRUSH_SIZES, store, type Settings } from "../storage";
 import { el } from "../ui/dom";
 import { holdButton } from "../ui/hold";
-import { icon } from "../ui/icons";
+import { icon, type IconName } from "../ui/icons";
 import { topbar } from "../ui/topbar";
 
 /**
@@ -57,12 +57,28 @@ const ALL_COLORS: ColorEntry[] = [...MAIN_COLORS, ...MORE_COLORS];
 /** A save is scheduled this long after the last action, and never mid-stroke. */
 const SAVE_DELAY_MS = 500;
 
-type KidTool = Extract<Tool, "fill" | "brush" | "eraser">;
+type KidTool = Extract<Tool, "fill" | "marker" | "pencil" | "crayon" | "eraser">;
 
 const TOOL_HINTS: Record<KidTool, string> = {
   fill: "Нажми на область, чтобы закрасить",
-  brush: "Веди пальцем — получится линия",
+  marker: "Фломастер рисует гладко",
+  pencil: "Карандаш рисует тонко",
+  crayon: "Мелки оставляют следы, как на бумаге",
   eraser: "Ластик стирает краску",
+};
+
+const TOOL_ITEMS: { kind: KidTool; label: string; glyph: IconName }[] = [
+  { kind: "fill", label: "Заливка", glyph: "bucket" },
+  { kind: "marker", label: "Фломастер", glyph: "marker" },
+  { kind: "pencil", label: "Карандаш", glyph: "pencil" },
+  { kind: "crayon", label: "Мелки", glyph: "crayon" },
+  { kind: "eraser", label: "Ластик", glyph: "eraser" },
+];
+
+const SIZE_LABELS: Record<(typeof BRUSH_SIZES)[number], string> = {
+  8: "Маленький",
+  16: "Средний",
+  26: "Большой",
 };
 
 export function mountPicture(
@@ -109,6 +125,7 @@ export function mountPicture(
   );
 
   const toolsRow = el("div", { class: "tools", attrs: { role: "group", "aria-label": "Инструменты" } });
+  const sizeRow = el("div", { class: "sizes", attrs: { role: "group", "aria-label": "Размер" } });
   const paletteRow = el("div", { class: "palette", attrs: { role: "listbox", "aria-label": "Цвета" } });
   const hint = el("p", { class: "paint__hint", text: TOOL_HINTS.fill });
   const toast = el("p", { class: "toast", attrs: { role: "status", hidden: true } });
@@ -139,9 +156,8 @@ export function mountPicture(
     }),
     el("div", { class: "paint__canvas" }, [magnetBtn, zoomBtn, frame]),
     el("div", { class: "dock" }, [
-      el("p", { class: "dock__cap", text: "Инструменты" }),
       toolsRow,
-      el("p", { class: "dock__cap", text: "Цвета" }),
+      sizeRow,
       paletteRow,
       hint,
     ]),
@@ -157,12 +173,11 @@ export function mountPicture(
   let settings: Settings | undefined;
   let tool: KidTool = "fill";
   let color = MAIN_COLORS[1].hex;
-  let sizes: Record<"brush" | "eraser", number> = { brush: 16, eraser: 26 };
+  let brushSize: (typeof BRUSH_SIZES)[number] = 16;
   let disposed = false;
   let saving = false;
   /** Id of the gallery entry this session writes to, so repeats update it. */
   let sessionDrawingId: string | null = null;
-  let sizePopover: HTMLElement | null = null;
   let morePanel: HTMLElement | null = null;
   let fillOnly = false;
 
@@ -196,116 +211,96 @@ export function mountPicture(
     redoBtn.disabled = !book.canRedo;
   };
 
-  const closeSizePopover = (): void => {
-    sizePopover?.remove();
-    sizePopover = null;
-    toolsRow.querySelectorAll(".tool").forEach((node) => {
-      node.classList.remove("has-popover");
-    });
-  };
-
-  const openSizePopover = (anchor: HTMLButtonElement, kind: "brush" | "eraser"): void => {
-    if (sizePopover) {
-      closeSizePopover();
-      return;
+  const applySize = (size: (typeof BRUSH_SIZES)[number], persist: boolean): void => {
+    brushSize = size;
+    book.setSize(size);
+    if (persist) {
+      void store.saveSettings({ brushSize: size });
+      if (settings) settings.brushSize = size;
     }
-    const popover = el("div", { class: "sizes", attrs: { role: "group", "aria-label": "Размер" } });
-    for (const size of BRUSH_SIZES) {
-      const dot = el("span", { class: "sizes__dot", style: { width: `${size}px`, height: `${size}px` } });
-      const btn = el(
-        "button",
-        {
-          class: "sizes__btn",
-          attrs: { type: "button", "aria-pressed": String(sizes[kind] === size) },
-          on: {
-            click: (event) => {
-              event.stopPropagation();
-              sizes = { ...sizes, [kind]: size };
-              book.setSize(size);
-              void store.saveSettings({ brushSize: size });
-              sound.play("tool");
-              closeSizePopover();
-              renderTools();
-            },
-          },
-        },
-        [dot],
-      );
-      popover.append(btn);
-    }
-    anchor.classList.add("has-popover");
-    popover.style.left = `${anchor.offsetLeft + anchor.offsetWidth / 2}px`;
-    toolsRow.append(popover);
-    sizePopover = popover;
-    window.setTimeout(() => {
-      if (sizePopover === popover) closeSizePopover();
-    }, 4000);
+    renderSizes();
   };
 
   const selectTool = (next: KidTool): void => {
-    if (tool === next && next !== "fill") {
-      const anchor = toolsRow.querySelector<HTMLButtonElement>(`[data-tool="${next}"]`);
-      if (anchor) openSizePopover(anchor, next);
-      return;
-    }
-    closeSizePopover();
+    if (tool === next) return;
     tool = next;
     book.setTool(next);
-    if (next !== "fill") book.setSize(sizes[next]);
+    if (next !== "fill") book.setSize(brushSize);
     hint.textContent = TOOL_HINTS[next];
     sound.play("tool");
     renderTools();
   };
 
+  const clearButton = (): HTMLElement =>
+    holdButton({
+      label: "Очистить",
+      icon: icon("clear", 28),
+      duration: 1200,
+      onShort: () => showToast("Удерживай, чтобы очистить"),
+      onHold: () => {
+        if (!book.hasPaint()) {
+          hint.textContent = "Пока нечего стирать";
+          sound.play("miss");
+          return;
+        }
+        book.clear();
+        sound.play("clear");
+        hint.textContent = "Чистый лист";
+        window.setTimeout(() => {
+          if (!disposed) hint.textContent = TOOL_HINTS[tool];
+        }, 2200);
+      },
+    });
+
+  const renderSizes = (): void => {
+    sizeRow.replaceChildren();
+    sizeRow.hidden = fillOnly;
+    if (fillOnly) return;
+    for (const size of BRUSH_SIZES) {
+      const visual = Math.max(10, Math.round(size * 0.95));
+      const dot = el("span", { class: "sizes__dot", style: { width: `${visual}px`, height: `${visual}px` } });
+      const btn = el(
+        "button",
+        {
+          class: "sizes__btn",
+          attrs: {
+            type: "button",
+            "aria-label": SIZE_LABELS[size],
+            "aria-pressed": String(brushSize === size),
+          },
+          on: {
+            click: () => {
+              if (brushSize === size) return;
+              applySize(size, true);
+              sound.play("tool");
+            },
+          },
+        },
+        [dot],
+      );
+      sizeRow.append(btn);
+    }
+    const clear = clearButton();
+    clear.classList.add("sizes__clear");
+    sizeRow.append(clear);
+  };
+
   const renderTools = (): void => {
     toolsRow.replaceChildren();
-    const items: { kind: KidTool; label: string }[] = [
-      { kind: "fill", label: "Заливка" },
-      { kind: "brush", label: "Кисть" },
-      { kind: "eraser", label: "Ластик" },
-    ];
     toolsRow.classList.toggle("tools--single", fillOnly);
-    for (const item of fillOnly ? items.slice(0, 1) : items) {
+    const items = fillOnly ? TOOL_ITEMS.slice(0, 1) : TOOL_ITEMS;
+    for (const item of items) {
       const node = el(
         "button",
         {
           class: `tool${tool === item.kind ? " is-active" : ""}`,
-          attrs: { type: "button", "aria-pressed": String(tool === item.kind) },
+          attrs: { type: "button", "aria-pressed": String(tool === item.kind), "aria-label": item.label },
           dataset: { tool: item.kind },
           on: { click: () => selectTool(item.kind) },
         },
-        [
-          icon(item.kind === "fill" ? "bucket" : item.kind === "brush" ? "brush" : "eraser", 32),
-          el("span", { class: "tool__label", text: item.label }),
-        ],
+        [icon(item.glyph, 28), el("span", { class: "tool__label", text: item.label })],
       );
       toolsRow.append(node);
-    }
-
-    if (!fillOnly) toolsRow.append(
-      holdButton({
-        label: "Очистить",
-        icon: icon("clear", 32),
-        duration: 1200,
-        onShort: () => showToast("Удерживай, чтобы очистить"),
-        onHold: () => {
-          if (!book.hasPaint()) {
-            hint.textContent = "Пока нечего стирать";
-            sound.play("miss");
-            return;
-          }
-          book.clear();
-          sound.play("clear");
-          hint.textContent = "Чистый лист";
-          window.setTimeout(() => {
-            if (!disposed) hint.textContent = TOOL_HINTS[tool];
-          }, 2200);
-        },
-      }),
-    );
-    if (sizePopover) {
-      const active = toolsRow.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`);
-      active?.classList.add("has-popover");
     }
   };
 
@@ -506,7 +501,6 @@ export function mountPicture(
     saving = true;
     doneBtn.disabled = true;
     try {
-      closeSizePopover();
       closeMore();
       // "Готово" is always allowed and always cheerful: any amount of paint gets
       // the same reward screen. The star is given once per drawing, and only
@@ -611,17 +605,22 @@ export function mountPicture(
   window.addEventListener("ryzhik:leave", onPageHide);
 
   renderTools();
+  renderSizes();
   renderPalette();
   syncHistory();
 
   void (async () => {
     settings = await store.settings();
-    sizes = { brush: settings.brushSize, eraser: 26 };
+    const savedSize = BRUSH_SIZES.includes(settings.brushSize as (typeof BRUSH_SIZES)[number])
+      ? (settings.brushSize as (typeof BRUSH_SIZES)[number])
+      : 16;
     setMagnet(settings.magnet);
     book.setColor(color);
     book.setTool("fill");
+    book.setSize(savedSize);
     fillOnly = settings.fillOnly;
     magnetBtn.hidden = fillOnly;
+    applySize(savedSize, false);
     renderTools();
 
     if (!art) {
