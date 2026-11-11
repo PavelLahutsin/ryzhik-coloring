@@ -1,0 +1,23 @@
+{
+  "width": 1280,
+  "height": 720,
+  "regionCount": 33,
+  "tinyRegions": [
+    {
+      "area": 145,
+      "x": 835,
+      "y": 124
+    }
+  ],
+  "suspectedLeaks": [],
+  "options": {
+    "inkThreshold": 72,
+    "closingRadius": 2,
+    "fringeRadius": 2
+  },
+  "before": {
+    "regionCount": 33,
+    "neckCount": 0
+  },
+  "neckCount": 0
+}
